@@ -1,11 +1,6 @@
-package(default_visibility = ["//visibility:public"])
+load("//bazel:platforms.bzl", "SUPPORTED_PLATFORMS")
 
-SUPPORTED_PLATFORMS = [
-    "linux_amd64",
-    "linux_arm64",
-    "osx_amd64",
-    "osx_arm64",
-]
+package(default_visibility = ["//visibility:public"])
 
 TARGETS = [
     "microdnf",

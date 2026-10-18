@@ -2,3 +2,7 @@
 /.bazelrc.user
 /.untether-outbox/
 /pending/
+*.tar.gz
+release_notes.md
+release_assets/
+

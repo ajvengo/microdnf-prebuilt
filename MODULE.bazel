@@ -82,3 +82,12 @@ bazel_dep(name = "libdnf", version = "0.74.0.bcr.27")
 # Upstream microdnf tracked as a bzlmod extension
 microdnf = use_extension("//bazel:extensions.bzl", "microdnf_extension")
 use_repo(microdnf, "microdnf")
+
+# Register prebuilt microdnf toolchains
+register_toolchains(
+    "//microdnf:toolchain_linux_amd64",
+    "//microdnf:toolchain_linux_arm64",
+    "//microdnf:toolchain_osx_amd64",
+    "//microdnf:toolchain_osx_arm64",
+    "//microdnf:toolchain_host",
+)

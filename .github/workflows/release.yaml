@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "microdnf-prebuilt-v*"
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Tag name to release (e.g. microdnf-prebuilt-vc6a9aa9.bcr.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@v0.19.0
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+
+      - name: Prepare Release & Resolve Upstream SHA
+        id: prep
+        run: |
+          TAG="${{ inputs.tag_name || github.ref_name }}"
+          .github/workflows/release_prep.sh "${TAG}"
+
+      - name: Pull Docker sandbox image
+        run: docker pull gcr.io/flame-public/rbe-ubuntu24-04:latest
+
+      - name: Build All Release Targets
+        run: bazel build //... //:microdnf_all //:rpm2archive_all //:lock_all --config=ci
+
+      - name: Collect Prebuilt Binaries
+        run: |
+          mkdir -p release_assets
+          for target in microdnf rpm2archive lock; do
+            for platform in linux_amd64 linux_arm64 osx_amd64 osx_arm64; do
+              cp -L "bazel-bin/dnf/${target}_${platform}/${target}" "release_assets/${target}_${platform}"
+            done
+          done
+          cp "${{ steps.prep.outputs.archive_path }}" release_assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.prep.outputs.tag_name }}
+          name: microdnf-prebuilt ${{ steps.prep.outputs.tag_name }}
+          body_path: release_notes.md
+          files: release_assets/*
+          draft: false
+          prerelease: false
