@@ -114,7 +114,7 @@
         "/^bazel/3rdparty/modules/.*/source\\.json$/"
       ],
       "matchStrings": [
-        "\"url\":\\s*\"https://download\\.gnome\\.org/sources/(?<depName>[^/]+)/[0-9.]+/\\k<depName>-(?<currentValue>[0-9.]+)\\.tar\\.xz\""
+        "\"url\":\\s*\"https://download\\.gnome\\.org/sources/(?<depName>[^/]+)/[0-9.]+/[^/]+-(?<currentValue>[0-9.]+)\\.tar\\.xz\""
       ],
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "GNOME/{{{depName}}}"
@@ -150,7 +150,7 @@
         "/^bazel/3rdparty/modules/.*/source\\.json$/"
       ],
       "matchStrings": [
-        "\"url\":\\s*\"https://gnupg\\.org/ftp/gcrypt/(?<depName>[^/]+)/\\k<depName>-(?<currentValue>[0-9.]+)\\.tar\\.bz2\""
+        "\"url\":\\s*\"https://gnupg\\.org/ftp/gcrypt/(?<depName>[^/]+)/[^/]+-(?<currentValue>[0-9.]+)\\.tar\\.bz2\""
       ],
       "datasourceTemplate": "github-tags",
       "depNameTemplate": "gpg/{{{depName}}}"
