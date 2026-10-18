@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: ${{ github.ref_name != 'main' }}
 
+env:
+  BUILDBUDDY_ENDPOINT: ${{ vars.BUILDBUDDY_ENDPOINT || 'manuelfrancisconaranjo.buildbuddy.io' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,6 +26,11 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
+
+      - name: Configure BuildBuddy Remote Cluster
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: .github/workflows/setup_buildbuddy.sh
 
       - name: Pull Docker sandbox image
         run: docker pull gcr.io/flame-public/rbe-ubuntu24-04:latest

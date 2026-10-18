@@ -15,6 +15,9 @@ on:
 permissions:
   contents: write
 
+env:
+  BUILDBUDDY_ENDPOINT: ${{ vars.BUILDBUDDY_ENDPOINT || 'manuelfrancisconaranjo.buildbuddy.io' }}
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -30,6 +33,11 @@ jobs:
           bazelisk-cache: true
           disk-cache: ${{ github.workflow }}
           repository-cache: true
+
+      - name: Configure BuildBuddy Remote Cluster
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: .github/workflows/setup_buildbuddy.sh
 
       - name: Prepare Release & Resolve Upstream SHA
         id: prep
