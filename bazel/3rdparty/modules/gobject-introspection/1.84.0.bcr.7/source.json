@@ -1,0 +1,9 @@
+{
+    "url": "https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz",
+    "integrity": "sha256-lFtX2n7CYuXCZrieCR0UvoAMxCQnfYKgKHK315SoR3k=",
+    "strip_prefix": "gobject-introspection-1.84.0",
+    "overlay": {
+        "MODULE.bazel": "sha256-qfR6Dvu2KFmNRm7u6nNyvT3iXIxfLCFAX0z63rU7cYE=",
+        "BUILD.bazel": "sha256-n80MP9PS/aUvuMBXUaJM6WsOQhd+JIOPM1aUuEGuRSc="
+    }
+}

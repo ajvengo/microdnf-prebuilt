@@ -1,0 +1,13 @@
+{
+    "url": "https://github.com/rpm-software-management/libdnf/archive/refs/tags/0.74.0.tar.gz",
+    "integrity": "sha256-ZsrdjWx+nTDN02QVlsyrHMLX+4tItL/z6uCGAba1LaM=",
+    "strip_prefix": "libdnf-0.74.0",
+    "overlay": {
+        "BUILD.bazel": "sha256-eJYGJhclGz9wMbm11ZAuSLlR7TMHEFNEsdIJrt7jUQU=",
+        "MODULE.bazel": "sha256-euqoDcNj/24HEvsXTdG6yxNmHsVGn5+HthCTPXsDvWk=",
+        "libdnf/config-64.h": "sha256-AaYvTD7gByn5TwtTvQ/d9SRjggFc3X3PDAG0O+MwRPk=",
+        "libdnf/dnf-context.cpp": "sha256-PVtIr6G2p3q6eJIEUATV+DOgMdfskVW1biY32Fto364=",
+        "libdnf/dnf-version.h": "sha256-PB7PFmfONojtK6z9rY5l3nBwiHpwl3+Oo9Fa19cRAVI=",
+        "libdnf/utils/PreserveOrderMap.hpp": "sha256-RIGRey0Ef8pOIX1+MD5DrbMSAxBeB8fPWpvokAP2mnI="
+    }
+}

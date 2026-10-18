@@ -1,0 +1,7 @@
+module(
+    name = "libgpg-error",
+    version = "1.51.0.bcr.4",
+    compatibility_level = 1,
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.26")

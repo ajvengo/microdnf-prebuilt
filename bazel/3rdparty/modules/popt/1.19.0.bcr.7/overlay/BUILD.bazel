@@ -1,0 +1,26 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "popt",
+    srcs = [
+        "src/popt_config.h",
+        "src/popt.c",
+        "src/poptconfig.c",
+        "src/popthelp.c",
+        "src/poptint.c",
+        "src/poptint.h",
+        "src/poptparse.c",
+        "src/system.h",
+    ],
+    hdrs = [
+        "src/lookup3.c",
+        "src/popt.h",
+    ],
+    copts = [
+        "-include",
+        "popt_config.h",
+        "-Wno-unused-parameter",
+    ],
+    includes = ["src"],
+    visibility = ["//visibility:public"],
+)

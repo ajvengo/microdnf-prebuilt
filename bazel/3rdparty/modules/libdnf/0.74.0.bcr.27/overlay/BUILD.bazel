@@ -1,0 +1,55 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "libdnf",
+    srcs = glob([
+        "libdnf/**/*.cpp",
+        "libdnf/**/*.c",
+        "libdnf/**/*.hpp",
+        "libdnf/**/*.h",
+    ]),
+    hdrs = glob([
+        "libdnf/**/*.h",
+        "libdnf/**/*.hpp",
+        "libdnf/**/*.sql",
+    ]),
+    local_defines = [
+        "PACKAGE_VERSION=\\\"0.74.0\\\"",
+        "GETTEXT_DOMAIN=\\\"libdnf\\\"",
+        "G_LOG_DOMAIN=\\\"libdnf\\\"",
+    ],
+    copts = [
+        "-D_GNU_SOURCE",
+        "-DLIBDNF_UNSTABLE_API",
+        "-DLIBSOLV_SOLVABLE_PREPEND_DEP",
+        "-Wno-unused-parameter",
+        "-Wno-deprecated-declarations",
+    ],
+    includes = [
+        ".",
+        "libdnf",
+        "libdnf/transaction",
+        "libdnf/utils",
+    ],
+    linkopts = ["-ldl"],
+    deps = [
+        "@glib//:gio",
+        "@glib//:gio_unix",
+        "@glib//:glib",
+        "@glib//:gobject",
+        "@gpgme//:gpgme",
+        "@json-c//:json-c",
+        "@libmodulemd//:modulemd",
+        "@librepo//:librepo",
+        "@libsolv//:libsolv",
+        "@libsolv//:libsolvext",
+        "@openssl//:crypto",
+        "@pcre2",
+        "@rpm//:rpm",
+        "@rpm//:rpmio",
+        "@smartcols//:smartcols",
+        "@sqlite3",
+        "@zlib",
+    ],
+    visibility = ["//visibility:public"],
+)

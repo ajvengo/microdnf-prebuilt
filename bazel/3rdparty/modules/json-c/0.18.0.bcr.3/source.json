@@ -1,0 +1,12 @@
+{
+    "url": "https://github.com/json-c/json-c/archive/refs/tags/json-c-0.18-20240915.tar.gz",
+    "integrity": "sha256-MRLB8l057KZh/j/GY0MeEwzG4vkAwIFzgxf7pJ0p4pg=",
+    "strip_prefix": "json-c-json-c-0.18-20240915",
+    "overlay": {
+        "BUILD.bazel": "sha256-hw0plFTfiTvNL3fAFVzqX5wkPfyzaEEeYc5eHDh/wtE=",
+        "MODULE.bazel": "sha256-LuGANk98XtbQF36ZIvEnxHqA8jXmWTfEsiQjdFlqZJM=",
+        "config.h": "sha256-jfFHwSUqCHwqFu4FbzVmRFqhtdY+Sg6MOdavo56KGPM=",
+        "json.h": "sha256-BUCAefnWLb7DxOvCwFur3A9wzxMP29o5yVM3gFo1jyU=",
+        "json_config.h": "sha256-IX+Xbf0nrvK/2TIR1FhKgG4R9+VuJX8QKpbhUcD2Y1Y="
+    }
+}

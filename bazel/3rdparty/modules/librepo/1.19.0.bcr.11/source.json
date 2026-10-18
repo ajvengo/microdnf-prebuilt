@@ -1,0 +1,13 @@
+{
+    "url": "https://github.com/rpm-software-management/librepo/archive/refs/tags/1.19.0.tar.gz",
+    "integrity": "sha256-c5WzSvDXo/oT0tsa0MoNjLyuZpXC7NYsYgRgYYS/2Ss=",
+    "strip_prefix": "librepo-1.19.0",
+    "overlay": {
+        "BUILD.bazel": "sha256-xG0dBCTW8X0N00/qcxG1jyzGAoME6FO1jRiEqWnuSbU=",
+        "MODULE.bazel": "sha256-ni8XQ44HLG7CpB2Z9hNI+oSs/PFHsS+sPlxNthEvUQQ=",
+        "librepo/downloadtarget.h": "sha256-nLFj3yHvevddPCeI13fNr8fzlTRox490a4E2SIRvYfM=",
+        "librepo/handle.h": "sha256-Ft3Ar28aigeHycKirv9wSJb9lTx9p4YKdySMJY1n8Ss=",
+        "librepo/util.h": "sha256-YBjKbhNmFNaJHm5yhtvXZ0eCQntYWR9byYJ+gqoUoQw=",
+        "librepo/version.h": "sha256-g+jpOyPQCyb3WXKXo2zl0IAFXVcuI1dfxJ1nNsQ4M6M="
+    }
+}

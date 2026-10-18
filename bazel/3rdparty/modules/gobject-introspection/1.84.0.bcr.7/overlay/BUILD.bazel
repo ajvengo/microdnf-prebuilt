@@ -1,0 +1,155 @@
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+write_file(
+    name = "config_h_file",
+    out = "config.h",
+    content = [
+        "#ifndef __GI_CONFIG_H__",
+        "#define __GI_CONFIG_H__",
+        "#define GI_MAJOR_VERSION 1",
+        "#define GI_MINOR_VERSION 84",
+        "#define GI_MICRO_VERSION 0",
+        "#define GIR_SUFFIX \"gir-1.0\"",
+        "#define GIR_DIR \"/usr/share/gir-1.0\"",
+        "#define GOBJECT_INTROSPECTION_LIBDIR \"/usr/lib64\"",
+        "#define GOBJECT_INTROSPECTION_DATADIR \"/usr/share\"",
+        "#define SIZEOF_CHAR 1",
+        "#define SIZEOF_SHORT 2",
+        "#define SIZEOF_INT 4",
+        "#define SIZEOF_LONG 8",
+        "#define _GI_EXTERN __attribute__((visibility(\"default\"))) extern",
+        "#endif",
+    ],
+)
+
+expand_template(
+    name = "giversion_h",
+    out = "girepository/giversion.h",
+    substitutions = {
+        "@GI_MAJOR_VERSION@": "1",
+        "@GI_MINOR_VERSION@": "84",
+        "@GI_MICRO_VERSION@": "0",
+    },
+    template = "girepository/giversion.h.in",
+)
+
+CMPH_SRCS = [
+    "girepository/cmph/bdz.c",
+    "girepository/cmph/bdz_ph.c",
+    "girepository/cmph/bmz8.c",
+    "girepository/cmph/bmz.c",
+    "girepository/cmph/brz.c",
+    "girepository/cmph/buffer_entry.c",
+    "girepository/cmph/buffer_manager.c",
+    "girepository/cmph/chd.c",
+    "girepository/cmph/chd_ph.c",
+    "girepository/cmph/chm.c",
+    "girepository/cmph/cmph.c",
+    "girepository/cmph/cmph_structs.c",
+    "girepository/cmph/compressed_rank.c",
+    "girepository/cmph/compressed_seq.c",
+    "girepository/cmph/fch_buckets.c",
+    "girepository/cmph/fch.c",
+    "girepository/cmph/graph.c",
+    "girepository/cmph/hash.c",
+    "girepository/cmph/jenkins_hash.c",
+    "girepository/cmph/miller_rabin.c",
+    "girepository/cmph/select.c",
+    "girepository/cmph/vqueue.c",
+    "girepository/cmph/vstack.c",
+]
+
+GIREPO_HDRS = [
+    "girepository/giarginfo.h",
+    "girepository/gibaseinfo.h",
+    "girepository/gicallableinfo.h",
+    "girepository/giconstantinfo.h",
+    "girepository/gienuminfo.h",
+    "girepository/gifieldinfo.h",
+    "girepository/gifunctioninfo.h",
+    "girepository/giinterfaceinfo.h",
+    "girepository/giobjectinfo.h",
+    "girepository/gipropertyinfo.h",
+    "girepository/giregisteredtypeinfo.h",
+    "girepository/girepository.h",
+    "girepository/girffi.h",
+    "girepository/gisignalinfo.h",
+    "girepository/gistructinfo.h",
+    "girepository/gitypeinfo.h",
+    "girepository/gitypelib.h",
+    "girepository/gitypes.h",
+    "girepository/giunioninfo.h",
+    "girepository/giversionmacros.h",
+    "girepository/givfuncinfo.h",
+    ":giversion_h",
+]
+
+GIREPO_SRCS = [
+    "girepository/gdump.c",
+    "girepository/giarginfo.c",
+    "girepository/gibaseinfo.c",
+    "girepository/gicallableinfo.c",
+    "girepository/giconstantinfo.c",
+    "girepository/gienuminfo.c",
+    "girepository/gifieldinfo.c",
+    "girepository/gifunctioninfo.c",
+    "girepository/ginvoke.c",
+    "girepository/giinterfaceinfo.c",
+    "girepository/giobjectinfo.c",
+    "girepository/gipropertyinfo.c",
+    "girepository/giregisteredtypeinfo.c",
+    "girepository/girepository.c",
+    "girepository/girffi.c",
+    "girepository/girmodule.c",
+    "girepository/girnode.c",
+    "girepository/giroffsets.c",
+    "girepository/girparser.c",
+    "girepository/girwriter.c",
+    "girepository/gisignalinfo.c",
+    "girepository/gistructinfo.c",
+    "girepository/gitypeinfo.c",
+    "girepository/gitypelib.c",
+    "girepository/giunioninfo.c",
+    "girepository/giversion.c",
+    "girepository/givfuncinfo.c",
+    "girepository/gthash.c",
+]
+
+cc_library(
+    name = "girepository",
+    srcs = CMPH_SRCS + GIREPO_SRCS + glob([
+        "girepository/*.h",
+        "girepository/cmph/*.h",
+    ]) + [":config_h_file"],
+    hdrs = GIREPO_HDRS,
+    copts = [
+        "-w",
+        "-fno-strict-aliasing",
+    ],
+    includes = [
+        ".",
+        "girepository",
+        "girepository/cmph",
+    ],
+    linkopts = ["-lm"],
+    local_defines = [
+        "HAVE_CONFIG_H",
+        "G_IREPOSITORY_COMPILATION",
+    ],
+    deps = [
+        "@glib//:gio",
+        "@glib//:glib",
+        "@glib//:gmodule",
+        "@glib//:gobject",
+        "@libffi",
+    ],
+)
+
+alias(
+    name = "gobject-introspection",
+    actual = ":girepository",
+)

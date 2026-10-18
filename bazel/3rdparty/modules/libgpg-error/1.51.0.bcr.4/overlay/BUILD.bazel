@@ -1,0 +1,39 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "gpg-error",
+    srcs = [
+        "src/argparse.c",
+        "src/b64dec.c",
+        "src/b64enc.c",
+        "src/code-from-errno.c",
+        "src/code-to-errno.c",
+        "src/estream-printf.c",
+        "src/estream.c",
+        "src/init.c",
+        "src/logging.c",
+        "src/posix-lock.c",
+        "src/posix-thread.c",
+        "src/spawn-posix.c",
+        "src/strerror-sym.c",
+        "src/strerror.c",
+        "src/stringutils.c",
+        "src/strsource-sym.c",
+        "src/strsource.c",
+        "src/syscall-clamp.c",
+        "src/sysutils.c",
+        "src/version.c",
+        "src/visibility.c",
+    ] + glob(["src/*.h"]),
+    hdrs = [
+        "src/gpg-error.h",
+        "src/gpgrt.h",
+    ],
+    copts = [
+        "-DHAVE_CONFIG_H",
+        "-Wno-unused-parameter",
+    ],
+    includes = ["src"],
+    linkopts = ["-lpthread"],
+    visibility = ["//visibility:public"],
+)

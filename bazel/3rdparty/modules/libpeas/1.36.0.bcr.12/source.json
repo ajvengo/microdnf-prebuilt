@@ -1,0 +1,10 @@
+{
+    "url": "https://download.gnome.org/sources/libpeas/1.36/libpeas-1.36.0.tar.xz",
+    "integrity": "sha256-KXy5wszNjoYXYj0aPoQVtFMLjlqJPjUnu/0e3RMje0w=",
+    "strip_prefix": "libpeas-1.36.0",
+    "overlay": {
+        "MODULE.bazel": "sha256-yUNsc1jtFk41Y6zYVJCqHWo9OFD9dt4reOrftPAV6Hk=",
+        "BUILD.bazel": "sha256-+91nFOiJnobzXtjAXptd/NErfQ5H3e6INK/cAR6HHmw=",
+        "libpeas/peas-engine.c": "sha256-MErNjzm6eiGCBbnIgGJg1OY+rC6rgHV76ybdGYrxaBI="
+    }
+}

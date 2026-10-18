@@ -1,0 +1,11 @@
+{
+    "url": "https://github.com/file/file/archive/refs/tags/FILE5_46.tar.gz",
+    "integrity": "sha256-c8XxGo7fD97S/jRxsjp/zLPzNpoT6mElKbhpyNyWqis=",
+    "strip_prefix": "file-FILE5_46",
+    "overlay": {
+        "BUILD.bazel": "sha256-oMTXo2uP9sVyF942SEJQvNJveuyHIujSIJ5+qJupHQM=",
+        "MODULE.bazel": "sha256-PKutgs0Ett/CoImVMKIdAZxFuBqgGWfAd158v4x3CJw=",
+        "src/config.h": "sha256-aD6jzNwx6GeLahV1f+Ix/wB6E8ZWYbA+2Z+CLCYrCHI=",
+        "src/magic.h": "sha256-poD2aB1CLCcIcPA6UwP8L+owhyGetX+F6ghdxLKpSZw="
+    }
+}

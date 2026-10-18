@@ -1,0 +1,10 @@
+{
+    "url": "https://github.com/rpm-software-management/popt/archive/refs/tags/popt-1.19-release.tar.gz",
+    "integrity": "sha256-brQNZQUmy5/mPrRBW87N+c8wb3VW537/aJq8WkRnAGA=",
+    "strip_prefix": "popt-popt-1.19-release",
+    "overlay": {
+        "BUILD.bazel": "sha256-hnGfPYqLjAQ5dPLkTZdYXf/cZO6ZJ6xylMiQKyFSroo=",
+        "MODULE.bazel": "sha256-1xCHhdTz1fq1MdF990bWXAslTv9XkdQUV18V1YMn4KY=",
+        "src/popt_config.h": "sha256-s99HExT/potpkbiB/wWfaot+A8RvBBLYG9MECoAaj2U="
+    }
+}

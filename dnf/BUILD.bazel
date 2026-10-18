@@ -1,0 +1,233 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@bazel_lib//lib:transitions.bzl", "platform_transition_binary")
+load("//bazel:gresource.bzl", "glib_compile_resources")
+
+package(default_visibility = ["//visibility:public"])
+
+SUPPORTED_PLATFORMS = [
+    "linux_amd64",
+    "linux_arm64",
+    "osx_amd64",
+    "osx_arm64",
+]
+
+UPSTREAM_PLUGINS = [
+    "install",
+    "reinstall",
+    "remove",
+    "upgrade",
+    "distrosync",
+    "repolist",
+    "repoquery",
+    "leaves",
+    "clean",
+    "download",
+    "makecache",
+    "module_enable",
+    "module_disable",
+    "module_reset",
+    "swap",
+]
+
+LOCAL_PLUGINS = [
+    "rpm2archive",
+    "lock",
+]
+
+[
+    glib_compile_resources(
+        name = "gresource_" + plugin,
+        c_prefix = "dnf_command_" + plugin,
+        out = "plugins/{}/dnf-command-{}.gresource.c".format(plugin, plugin),
+        resources = ["@microdnf//:dnf/plugins/{}/{}.plugin".format(plugin, plugin)],
+        xml = "@microdnf//:dnf/plugins/{}/dnf-command-{}.gresource.xml".format(plugin, plugin),
+    )
+    for plugin in UPSTREAM_PLUGINS
+]
+
+[
+    glib_compile_resources(
+        name = "gresource_" + plugin,
+        c_prefix = "dnf_command_" + plugin,
+        out = "plugins/{}/dnf-command-{}.gresource.c".format(plugin, plugin),
+        resources = ["plugins/{}/{}.plugin".format(plugin, plugin)],
+        xml = "plugins/{}/dnf-command-{}.gresource.xml".format(plugin, plugin),
+    )
+    for plugin in LOCAL_PLUGINS
+]
+
+COMMON_COPTS = [
+    "--std=gnu11",
+    "-fstrict-aliasing",
+    "-Wformat=2",
+    "-Wunused",
+    "-Wuninitialized",
+    "-Wstrict-prototypes",
+    "-Wmissing-prototypes",
+    "-Werror=implicit",
+    "-Werror=init-self",
+    "-Werror=main",
+]
+
+genrule(
+    name = "copy_upstream_core",
+    srcs = [
+        "@microdnf//:dnf/dnf-command.c",
+        "@microdnf//:dnf/dnf-command.h",
+        "@microdnf//:dnf/dnf-utils.c",
+        "@microdnf//:dnf/dnf-utils.h",
+    ],
+    outs = [
+        "dnf-command.c",
+        "dnf-command.h",
+        "dnf-utils.c",
+        "dnf-utils.h",
+    ],
+    cmd = "for f in $(SRCS); do cp $$f $(RULEDIR)/$$(basename $$f); done",
+)
+
+cc_binary(
+    name = "microdnf",
+    srcs = [
+        ":copy_upstream_core",
+        "dnf-main.c",
+        "lock.c",
+        "lock.h",
+        "rpm2archive.c",
+        "rpm2archive.h",
+    ] + [
+        "@microdnf//:dnf/plugins/{}/dnf-command-{}.c".format(plugin, plugin)
+        for plugin in UPSTREAM_PLUGINS
+    ] + [
+        "@microdnf//:dnf/plugins/{}/dnf-command-{}.h".format(plugin, plugin)
+        for plugin in UPSTREAM_PLUGINS
+    ] + [
+        ":gresource_" + plugin
+        for plugin in UPSTREAM_PLUGINS
+    ] + [
+        "plugins/{}/dnf-command-{}.c".format(plugin, plugin)
+        for plugin in LOCAL_PLUGINS
+    ] + [
+        "plugins/{}/dnf-command-{}.h".format(plugin, plugin)
+        for plugin in LOCAL_PLUGINS
+    ] + [
+        ":gresource_" + plugin
+        for plugin in LOCAL_PLUGINS
+    ],
+    copts = COMMON_COPTS,
+    defines = [
+        'PACKAGE_LIBDIR=\\"/usr/lib64/dnf\\"',
+        'PACKAGE_DATADIR=\\"/usr/share/dnf\\"',
+        'BUILDDIR=\\"dnf\\"',
+        'SRCDIR=\\"dnf\\"',
+    ],
+    includes = ["."],
+    linkopts = ["-rdynamic"],
+    deps = [
+        "@glib//:gio",
+        "@glib//:glib",
+        "@glib//:gobject",
+        "@json-c//:json-c",
+        "@libarchive//libarchive:archive",
+        "@libdnf//:libdnf",
+        "@libpeas//:libpeas",
+        "@rpm//:rpm",
+        "@rpm//:rpmio",
+        "@smartcols//:smartcols",
+    ],
+)
+
+[
+    platform_transition_binary(
+        name = "microdnf_" + platform,
+        binary = ":microdnf",
+        target_platform = "//bazel:" + platform,
+    )
+    for platform in SUPPORTED_PLATFORMS
+]
+
+filegroup(
+    name = "microdnf_all",
+    srcs = [
+        ":microdnf_" + platform
+        for platform in SUPPORTED_PLATFORMS
+    ],
+)
+
+cc_binary(
+    name = "rpm2archive",
+    srcs = [
+        "rpm2archive.c",
+        "rpm2archive.h",
+        "rpm2archive-main.c",
+    ],
+    copts = COMMON_COPTS,
+    includes = ["."],
+    deps = [
+        "@glib//:glib",
+        "@libarchive//libarchive:archive",
+        "@rpm//:rpm",
+        "@rpm//:rpmio",
+    ],
+)
+
+[
+    platform_transition_binary(
+        name = "rpm2archive_" + platform,
+        binary = ":rpm2archive",
+        target_platform = "//bazel:" + platform,
+    )
+    for platform in SUPPORTED_PLATFORMS
+]
+
+filegroup(
+    name = "rpm2archive_all",
+    srcs = [
+        ":rpm2archive_" + platform
+        for platform in SUPPORTED_PLATFORMS
+    ],
+)
+
+cc_binary(
+    name = "lock",
+    srcs = [
+        ":copy_upstream_core",
+        "lock.c",
+        "lock.h",
+        "lock-main.c",
+    ],
+    copts = COMMON_COPTS,
+    defines = [
+        'PACKAGE_LIBDIR=\\"/usr/lib64/dnf\\"',
+        'PACKAGE_DATADIR=\\"/usr/share/dnf\\"',
+        'BUILDDIR=\\"dnf\\"',
+        'SRCDIR=\\"dnf\\"',
+    ],
+    includes = ["."],
+    deps = [
+        "@glib//:gio",
+        "@glib//:glib",
+        "@glib//:gobject",
+        "@json-c//:json-c",
+        "@libdnf//:libdnf",
+        "@rpm//:rpm",
+        "@smartcols//:smartcols",
+    ],
+)
+
+[
+    platform_transition_binary(
+        name = "lock_" + platform,
+        binary = ":lock",
+        target_platform = "//bazel:" + platform,
+    )
+    for platform in SUPPORTED_PLATFORMS
+]
+
+filegroup(
+    name = "lock_all",
+    srcs = [
+        ":lock_" + platform
+        for platform in SUPPORTED_PLATFORMS
+    ],
+)

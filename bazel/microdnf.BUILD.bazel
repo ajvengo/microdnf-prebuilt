@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(glob(["**/*"]))
+
+cc_library(
+    name = "headers",
+    hdrs = glob(["dnf/**/*.h"]),
+    strip_include_prefix = "dnf",
+)
+
+filegroup(
+    name = "srcs",
+    srcs = glob(["**/*"]),
+)

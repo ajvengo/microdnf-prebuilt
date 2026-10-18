@@ -1,0 +1,9 @@
+[Plugin]
+Module = command_rpm2archive
+Embedded = dnf_command_rpm2archive_register_types
+Name = rpm2archive
+Description = Create layer archive from RPM packages
+Authors = Antigravity
+License = GPL-2.0+
+Copyright = Copyright © 2026 Red Hat, Inc. and contributors
+X-Command-Syntax = rpm2archive [OPTION…] RPM [RPM…]

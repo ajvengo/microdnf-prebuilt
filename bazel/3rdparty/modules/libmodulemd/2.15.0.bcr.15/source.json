@@ -1,0 +1,10 @@
+{
+    "url": "https://github.com/fedora-modularity/libmodulemd/releases/download/2.15.0/modulemd-2.15.0.tar.xz",
+    "integrity": "sha256-FUWDI9HR9hT55wb2I3lPldI+WfTDfe6qFod0Y67jSvU=",
+    "strip_prefix": "modulemd-2.15.0",
+    "overlay": {
+        "BUILD.bazel": "sha256-S/YvAW6Le3bOT5uhDXFiwzJuBYFfBEqQQGm+IlaQRUA=",
+        "MODULE.bazel": "sha256-ITj0cpaxk2i8i8cozBCWlybjPL2gQal9Ebml0TTf9+E=",
+        "modulemd/include/modulemd-config.h": "sha256-w6HPp2/6JgPjwNENjEjqNzI85R+mDBPYQdpJ0fXZ5zw="
+    }
+}

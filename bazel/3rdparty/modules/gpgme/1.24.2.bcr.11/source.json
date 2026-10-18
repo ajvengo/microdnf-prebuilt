@@ -1,0 +1,11 @@
+{
+    "url": "https://gnupg.org/ftp/gcrypt/gpgme/gpgme-1.24.2.tar.bz2",
+    "integrity": "sha256-4RsaDjYXd+nlX0igPYkJbiq/CMY9hLcBfP4dzgZjlYE=",
+    "strip_prefix": "gpgme-1.24.2",
+    "overlay": {
+        "BUILD.bazel": "sha256-OX/lifIQ2wcxjrohffnwnNfHatwW0uhyYCwMHd0I4E8=",
+        "MODULE.bazel": "sha256-/eP4REw31qahJ5HKsC3I25Uh5PkaCpqgVFXJlBja4og=",
+        "src/config.h": "sha256-UoVl2thLJu4EszcfEOAFix1CrWp6W963pDvsOXT076A=",
+        "src/gpgme.h": "sha256-nxSVuO8obcKGxgJhdanv1rLEejH5K8qrGe4GCrGrPOg="
+    }
+}

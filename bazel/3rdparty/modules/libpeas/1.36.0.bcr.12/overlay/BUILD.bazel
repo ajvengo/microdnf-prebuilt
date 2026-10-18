@@ -1,0 +1,143 @@
+load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@glib//gobject:gobject.bzl", "genmarshal")
+load("@rules_cc//cc:defs.bzl", "cc_library", "objc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+write_file(
+    name = "config_h_file",
+    out = "config.h",
+    content = select({
+        "@platforms//os:macos": [
+            "#ifndef __PEAS_CONFIG_H__",
+            "#define __PEAS_CONFIG_H__",
+            "#define PACKAGE \"libpeas\"",
+            "#define PACKAGE_NAME \"libpeas\"",
+            "#define PACKAGE_STRING \"libpeas-1.36.0\"",
+            "#define PACKAGE_VERSION \"1.36.0\"",
+            "#define VERSION \"1.36.0\"",
+            "#define GETTEXT_PACKAGE \"libpeas-1.0\"",
+            "#define GLIB_VERSION_MIN_REQUIRED GLIB_VERSION_2_44",
+            "#define GLIB_VERSION_MAX_ALLOWED GLIB_VERSION_2_44",
+            "#define _PEAS_EXTERN __attribute__((visibility(\"default\"))) extern",
+            "#endif",
+        ],
+        "//conditions:default": [
+            "#ifndef __PEAS_CONFIG_H__",
+            "#define __PEAS_CONFIG_H__",
+            "#define PACKAGE \"libpeas\"",
+            "#define PACKAGE_NAME \"libpeas\"",
+            "#define PACKAGE_STRING \"libpeas-1.36.0\"",
+            "#define PACKAGE_VERSION \"1.36.0\"",
+            "#define VERSION \"1.36.0\"",
+            "#define GETTEXT_PACKAGE \"libpeas-1.0\"",
+            "#define GLIB_VERSION_MIN_REQUIRED GLIB_VERSION_2_44",
+            "#define GLIB_VERSION_MAX_ALLOWED GLIB_VERSION_2_44",
+            "#define _PEAS_EXTERN __attribute__((visibility(\"default\"))) extern",
+            "#endif",
+        ],
+    }),
+)
+
+expand_template(
+    name = "peas_version_h",
+    out = "libpeas/peas-version.h",
+    substitutions = {
+        "@PEAS_MAJOR_VERSION@": "1",
+        "@PEAS_MINOR_VERSION@": "36",
+        "@PEAS_MICRO_VERSION@": "0",
+        "@PEAS_VERSION@": "1.36.0",
+    },
+    template = "libpeas/peas-version.h.in",
+)
+
+genmarshal(
+    name = "peas_marshal",
+    out_body = "libpeas/peas-marshal.c",
+    out_header = "libpeas/peas-marshal.h",
+    prefix = "peas_cclosure_marshal",
+    src = "libpeas/peas-marshal.list",
+)
+
+PEAS_PUBLIC_HDRS = [
+    "libpeas/peas-activatable.h",
+    "libpeas/peas-autocleanups.h",
+    "libpeas/peas-engine.h",
+    "libpeas/peas-extension.h",
+    "libpeas/peas-extension-base.h",
+    "libpeas/peas-extension-set.h",
+    "libpeas/peas-object-module.h",
+    "libpeas/peas-plugin-info.h",
+    "libpeas/peas-version-macros.h",
+    "libpeas/peas.h",
+    ":peas_version_h",
+]
+
+objc_library(
+    name = "libpeas_osx_objc",
+    srcs = ["libpeas/peas-utils-osx.m"],
+    hdrs = ["libpeas/peas-utils-osx.h"],
+    copts = [
+        "-w",
+        "-fno-objc-arc",
+    ],
+    includes = [
+        ".",
+        "libpeas",
+    ],
+    sdk_frameworks = [
+        "AppKit",
+        "Foundation",
+    ],
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:macos"],
+    deps = [
+        "@glib//:gio",
+        "@glib//:glib",
+        "@glib//:gmodule",
+        "@glib//:gobject",
+    ],
+)
+
+cc_library(
+    name = "libpeas",
+    srcs = [
+        "libpeas/peas-activatable.c",
+        "libpeas/peas-debug.c",
+        "libpeas/peas-dirs.c",
+        "libpeas/peas-engine.c",
+        "libpeas/peas-extension.c",
+        "libpeas/peas-extension-base.c",
+        "libpeas/peas-extension-set.c",
+        "libpeas/peas-i18n.c",
+        "libpeas/peas-introspection.c",
+        "libpeas/peas-object-module.c",
+        "libpeas/peas-plugin-info.c",
+        "libpeas/peas-plugin-loader.c",
+        "libpeas/peas-plugin-loader-c.c",
+        "libpeas/peas-utils.c",
+        "libpeas/peas-marshal.c",
+        "libpeas/peas-marshal.h",
+        ":config_h_file",
+    ] + glob(["libpeas/*.h"]),
+    hdrs = PEAS_PUBLIC_HDRS,
+    copts = ["-w"],
+    includes = [
+        ".",
+        "libpeas",
+    ],
+    local_defines = [
+        "HAVE_CONFIG_H",
+        'G_LOG_DOMAIN=\\"libpeas\\"',
+        'DATADIR=\\"/usr/share\\"',
+        'LIBDIR=\\"/usr/lib64\\"', 
+    ],
+    deps = [
+        "@glib//:gio",
+        "@glib//:glib",
+        "@glib//:gmodule",
+        "@glib//:gobject",
+        "@gobject-introspection//:girepository",
+    ],
+)

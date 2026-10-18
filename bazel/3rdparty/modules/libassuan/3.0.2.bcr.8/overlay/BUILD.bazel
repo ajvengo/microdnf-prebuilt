@@ -1,0 +1,43 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "assuan",
+    srcs = [
+        "src/assuan-buffer.c",
+        "src/assuan-defs.h",
+        "src/assuan-error.c",
+        "src/assuan-handler.c",
+        "src/assuan-inquire.c",
+        "src/assuan-io.c",
+        "src/assuan-listen.c",
+        "src/assuan-logging.c",
+        "src/assuan-pipe-connect.c",
+        "src/assuan-pipe-server.c",
+        "src/assuan-socket-connect.c",
+        "src/assuan-socket-server.c",
+        "src/assuan-socket.c",
+        "src/assuan-uds.c",
+        "src/assuan.c",
+        "src/client.c",
+        "src/context.c",
+        "src/conversion.c",
+        "src/debug.c",
+        "src/debug.h",
+        "src/server.c",
+        "src/system-posix.c",
+        "src/system.c",
+        "src/sysutils.c",
+        "src/config.h",
+    ] + select({
+        "@platforms//os:macos": ["src/memrchr.c"],
+        "//conditions:default": ["src/funopen.c"],
+    }),
+    hdrs = ["src/assuan.h"],
+    copts = [
+        "-DHAVE_CONFIG_H",
+        "-Wno-unused-parameter",
+    ],
+    includes = ["src"],
+    deps = ["@libgpg-error//:gpg-error"],
+    visibility = ["//visibility:public"],
+)
