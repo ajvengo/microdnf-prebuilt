@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Validate Renovate configuration
+        run: npx --yes --package renovate renovate-config-validator --strict renovate.json
+
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.1
         with:
