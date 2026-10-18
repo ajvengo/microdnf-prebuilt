@@ -41,6 +41,8 @@ jobs:
 
       - name: Prepare Upstream SHA & Pin microdnf
         id: prep
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ inputs.tag_name || github.ref_name }}"
           .github/workflows/release_prep.sh "${TAG}"

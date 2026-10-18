@@ -9,6 +9,13 @@ fi
 
 echo "Processing release tag: ${TAG}"
 
+# Enforce tag immutability: release must not already exist on GitHub
+if command -v gh >/dev/null 2>&1 && gh release view "${TAG}" >/dev/null 2>&1; then
+  echo "Error: Release for tag '${TAG}' already exists on GitHub." >&2
+  echo "Tags are strictly immutable. To release fixes or updates, bump the BCR build ID (e.g. .bcr.2) instead." >&2
+  exit 1
+fi
+
 SHORT_SHA=""
 BUILD_ID=""
 FULL_SHA=""
