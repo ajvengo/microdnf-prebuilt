@@ -39,7 +39,7 @@ jobs:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         run: .github/workflows/setup_buildbuddy.sh
 
-      - name: Prepare Release & Resolve Upstream SHA
+      - name: Prepare Upstream SHA & Pin microdnf
         id: prep
         run: |
           TAG="${{ inputs.tag_name || github.ref_name }}"
@@ -49,17 +49,16 @@ jobs:
         run: docker pull gcr.io/flame-public/rbe-ubuntu24-04:latest
 
       - name: Build All Release Targets
-        run: bazel build //... //:microdnf_all //:rpm2archive_all //:lock_all --config=ci
+        run: bazel build //:microdnf_all //:rpm2archive_all //:lock_all --config=ci
 
-      - name: Collect Prebuilt Binaries
+      - name: Package Release Assets & Generate Integrities
+        id: pkg
         run: |
-          mkdir -p release_assets
-          for target in microdnf rpm2archive lock; do
-            for platform in linux_amd64 linux_arm64 osx_amd64 osx_arm64; do
-              cp -L "bazel-bin/dnf/${target}_${platform}/${target}" "release_assets/${target}_${platform}"
-            done
-          done
-          cp "${{ steps.prep.outputs.archive_path }}" release_assets/
+          TAG="${{ steps.prep.outputs.tag_name }}"
+          FULL_SHA="${{ steps.prep.outputs.upstream_full_sha }}"
+          SHORT_SHA="${{ steps.prep.outputs.upstream_short_sha }}"
+          BUILD_ID="${{ steps.prep.outputs.build_id }}"
+          .github/workflows/package_release.sh "${TAG}" "${FULL_SHA}" "${SHORT_SHA}" "${BUILD_ID}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

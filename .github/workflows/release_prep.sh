@@ -44,6 +44,13 @@ fi
 
 echo "Resolved upstream microdnf SHA: ${FULL_SHA} (short: ${SHORT_SHA}, build: ${BUILD_ID})"
 
+# Update bazel/extensions.bzl to point to the resolved upstream git commit
+if [ -f "bazel/extensions.bzl" ]; then
+  echo "Updating bazel/extensions.bzl to commit: ${FULL_SHA}"
+  sed -i -E "s/commit = \"[0-9a-fA-F]+\"/commit = \"${FULL_SHA}\"/" bazel/extensions.bzl
+  git diff bazel/extensions.bzl || true
+fi
+
 # Annotate in GitHub Actions workflow if running on CI
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "tag_name=${TAG}" >> "${GITHUB_OUTPUT}"
@@ -62,56 +69,4 @@ EOF
 fi
 
 echo "::notice title=Upstream microdnf SHA::Resolved ${SHORT_SHA} to ${FULL_SHA} (build ${BUILD_ID})"
-
-# Create source archive
-if [[ "${TAG}" == microdnf-prebuilt-* ]]; then
-  PREFIX="${TAG}"
-  ARCHIVE="${TAG}.tar.gz"
-else
-  PREFIX="microdnf-prebuilt-${TAG}"
-  ARCHIVE="microdnf-prebuilt-${TAG}.tar.gz"
-fi
-
-COMMIT_OR_TAG="${TAG}"
-if ! git rev-parse --verify "${COMMIT_OR_TAG}" >/dev/null 2>&1; then
-  COMMIT_OR_TAG="HEAD"
-fi
-
-git archive --format=tar --prefix="${PREFIX}/" "${COMMIT_OR_TAG}" | gzip > "${ARCHIVE}"
-ARCHIVE_SHA256=$(sha256sum "${ARCHIVE}" | awk '{print $1}')
-
-if [ -n "${GITHUB_OUTPUT:-}" ]; then
-  echo "archive_path=${ARCHIVE}" >> "${GITHUB_OUTPUT}"
-  echo "archive_sha256=${ARCHIVE_SHA256}" >> "${GITHUB_OUTPUT}"
-fi
-
-DISPLAY_TAG="${TAG#microdnf-prebuilt-}"
-
-# Generate release notes
-cat > release_notes.md << EOF
-## microdnf-prebuilt ${DISPLAY_TAG}
-
-### Upstream Provenance
-- **Upstream Project**: [rpm-software-management/microdnf](https://github.com/rpm-software-management/microdnf)
-- **Upstream Commit**: [\`${FULL_SHA}\`](https://github.com/rpm-software-management/microdnf/commit/${FULL_SHA}) (\`${SHORT_SHA}\`)
-- **Build ID**: \`${BUILD_ID}\`
-
-### Artifacts & Integrity
-- **Release Source Archive**: \`${ARCHIVE}\`
-- **SHA256**: \`${ARCHIVE_SHA256}\`
-
-### Bzlmod Usage
-
-\`\`\`starlark
-bazel_dep(name = "microdnf_prebuilt", version = "${TAG#microdnf-prebuilt-v}")
-\`\`\`
-
-### Prebuilt Binaries
-This release includes standalone prebuilt binaries and toolchains for:
-- \`linux_amd64\`
-- \`linux_arm64\`
-- \`osx_amd64\`
-- \`osx_arm64\`
-EOF
-
-echo "Release preparation complete. Generated ${ARCHIVE} and release_notes.md."
+echo "Release preparation complete."

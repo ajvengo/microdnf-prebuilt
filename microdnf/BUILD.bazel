@@ -8,20 +8,6 @@ toolchain_type(
     visibility = ["//visibility:public"],
 )
 
-microdnf_toolchain(
-    name = "toolchain_impl_host",
-    lock = "//dnf:lock",
-    microdnf = "//dnf:microdnf",
-    rpm2archive = "//dnf:rpm2archive",
-)
-
-toolchain(
-    name = "toolchain_host",
-    toolchain = ":toolchain_impl_host",
-    toolchain_type = ":toolchain_type",
-    visibility = ["//visibility:public"],
-)
-
 PLATFORM_CONSTRAINTS = {
     "linux_amd64": [
         "@platforms//os:linux",
@@ -42,11 +28,44 @@ PLATFORM_CONSTRAINTS = {
 }
 
 [
+    config_setting(
+        name = "is_" + platform,
+        constraint_values = PLATFORM_CONSTRAINTS[platform],
+    )
+    for platform in SUPPORTED_PLATFORMS
+]
+
+# Host toolchain implementation selects the prebuilt binary matching host platform
+microdnf_toolchain(
+    name = "toolchain_impl_host",
+    lock = select({
+        ":is_" + platform: "@lock_" + platform + "//file"
+        for platform in SUPPORTED_PLATFORMS
+    }),
+    microdnf = select({
+        ":is_" + platform: "@microdnf_" + platform + "//file"
+        for platform in SUPPORTED_PLATFORMS
+    }),
+    rpm2archive = select({
+        ":is_" + platform: "@rpm2archive_" + platform + "//file"
+        for platform in SUPPORTED_PLATFORMS
+    }),
+)
+
+toolchain(
+    name = "toolchain_host",
+    toolchain = ":toolchain_impl_host",
+    toolchain_type = ":toolchain_type",
+    visibility = ["//visibility:public"],
+)
+
+# Platform-specific toolchain implementations binding to http_file prebuilt binaries
+[
     microdnf_toolchain(
         name = "toolchain_impl_" + platform,
-        lock = "//dnf:lock_" + platform,
-        microdnf = "//dnf:microdnf_" + platform,
-        rpm2archive = "//dnf:rpm2archive_" + platform,
+        lock = "@lock_" + platform + "//file",
+        microdnf = "@microdnf_" + platform + "//file",
+        rpm2archive = "@rpm2archive_" + platform + "//file",
     )
     for platform in SUPPORTED_PLATFORMS
 ]
