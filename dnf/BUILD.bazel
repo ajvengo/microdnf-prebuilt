@@ -33,8 +33,8 @@ LOCAL_PLUGINS = [
         name = "gresource_" + plugin,
         c_prefix = "dnf_command_" + plugin,
         out = "plugins/{}/dnf-command-{}.gresource.c".format(plugin, plugin),
-        resources = ["@microdnf//:dnf/plugins/{}/{}.plugin".format(plugin, plugin)],
-        xml = "@microdnf//:dnf/plugins/{}/dnf-command-{}.gresource.xml".format(plugin, plugin),
+        resources = ["@microdnf_src//:dnf/plugins/{}/{}.plugin".format(plugin, plugin)],
+        xml = "@microdnf_src//:dnf/plugins/{}/dnf-command-{}.gresource.xml".format(plugin, plugin),
     )
     for plugin in UPSTREAM_PLUGINS
 ]
@@ -66,10 +66,10 @@ COMMON_COPTS = [
 genrule(
     name = "copy_upstream_core",
     srcs = [
-        "@microdnf//:dnf/dnf-command.c",
-        "@microdnf//:dnf/dnf-command.h",
-        "@microdnf//:dnf/dnf-utils.c",
-        "@microdnf//:dnf/dnf-utils.h",
+        "@microdnf_src//:dnf/dnf-command.c",
+        "@microdnf_src//:dnf/dnf-command.h",
+        "@microdnf_src//:dnf/dnf-utils.c",
+        "@microdnf_src//:dnf/dnf-utils.h",
     ],
     outs = [
         "dnf-command.c",
@@ -90,10 +90,10 @@ cc_binary(
         "rpm2archive.c",
         "rpm2archive.h",
     ] + [
-        "@microdnf//:dnf/plugins/{}/dnf-command-{}.c".format(plugin, plugin)
+        "@microdnf_src//:dnf/plugins/{}/dnf-command-{}.c".format(plugin, plugin)
         for plugin in UPSTREAM_PLUGINS
     ] + [
-        "@microdnf//:dnf/plugins/{}/dnf-command-{}.h".format(plugin, plugin)
+        "@microdnf_src//:dnf/plugins/{}/dnf-command-{}.h".format(plugin, plugin)
         for plugin in UPSTREAM_PLUGINS
     ] + [
         ":gresource_" + plugin
@@ -183,7 +183,7 @@ filegroup(
 )
 
 cc_binary(
-    name = "lock",
+    name = "dnf_lock",
     srcs = [
         ":copy_upstream_core",
         "lock.c",
@@ -211,17 +211,17 @@ cc_binary(
 
 [
     platform_transition_binary(
-        name = "lock_" + platform,
-        binary = ":lock",
+        name = "dnf_lock_" + platform,
+        binary = ":dnf_lock",
         target_platform = "//bazel:" + platform,
     )
     for platform in SUPPORTED_PLATFORMS
 ]
 
 filegroup(
-    name = "lock_all",
+    name = "dnf_lock_all",
     srcs = [
-        ":lock_" + platform
+        ":dnf_lock_" + platform
         for platform in SUPPORTED_PLATFORMS
     ],
 )

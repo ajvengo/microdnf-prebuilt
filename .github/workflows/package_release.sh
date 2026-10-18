@@ -32,7 +32,7 @@ BASE_URL="https://github.com/bookingcom/microdnf-prebuilt/releases/download/${TA
 # 1. Collect all 12 prebuilt binaries and compute integrity hashes
 declare -A INTEGRITIES
 
-for target in lock microdnf rpm2archive; do
+for target in dnf_lock microdnf rpm2archive; do
   for platform in linux_amd64 linux_arm64 osx_amd64 osx_arm64; do
     bin_name="${target}_${platform}"
     src_file="bazel-bin/dnf/${bin_name}/${target}"
@@ -98,18 +98,21 @@ module(
 
 bazel_dep(name = "platforms", version = "1.1.0")
 
-# Prebuilt binary repositories via http_file
+# Prebuilt binary repositories and host alias repositories
 microdnf_prebuilt = use_extension("//microdnf:extensions.bzl", "microdnf_prebuilt_extension")
 use_repo(
     microdnf_prebuilt,
-    "lock_linux_amd64",
-    "lock_linux_arm64",
-    "lock_osx_amd64",
-    "lock_osx_arm64",
+    "dnf_lock",
+    "dnf_lock_linux_amd64",
+    "dnf_lock_linux_arm64",
+    "dnf_lock_osx_amd64",
+    "dnf_lock_osx_arm64",
+    "microdnf",
     "microdnf_linux_amd64",
     "microdnf_linux_arm64",
     "microdnf_osx_amd64",
     "microdnf_osx_arm64",
+    "rpm2archive",
     "rpm2archive_linux_amd64",
     "rpm2archive_linux_arm64",
     "rpm2archive_osx_amd64",
@@ -165,10 +168,10 @@ bazel_dep(name = "microdnf_prebuilt", version = "${RELEASE_VERSION}")
 
 ### Prebuilt Binaries & Integrities
 Prebuilt standalone executables and toolchains are available for:
-- \`linux_amd64\` (\`microdnf\`, \`rpm2archive\`, \`lock\`)
-- \`linux_arm64\` (\`microdnf\`, \`rpm2archive\`, \`lock\`)
-- \`osx_amd64\` (\`microdnf\`, \`rpm2archive\`, \`lock\`)
-- \`osx_arm64\` (\`microdnf\`, \`rpm2archive\`, \`lock\`)
+- \`linux_amd64\` (\`microdnf\`, \`rpm2archive\`, \`dnf_lock\`)
+- \`linux_arm64\` (\`microdnf\`, \`rpm2archive\`, \`dnf_lock\`)
+- \`osx_amd64\` (\`microdnf\`, \`rpm2archive\`, \`dnf_lock\`)
+- \`osx_arm64\` (\`microdnf\`, \`rpm2archive\`, \`dnf_lock\`)
 EOF
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then

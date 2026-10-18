@@ -49,7 +49,7 @@ jobs:
         run: docker pull gcr.io/flame-public/rbe-ubuntu24-04:latest
 
       - name: Build All Release Targets
-        run: bazel build //:microdnf_all //:rpm2archive_all //:lock_all --config=ci
+        run: bazel build //:microdnf_all //:rpm2archive_all //:dnf_lock_all --config=ci
 
       - name: Package Release Assets & Generate Integrities
         id: pkg

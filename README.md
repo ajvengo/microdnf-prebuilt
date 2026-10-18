@@ -1,6 +1,6 @@
 # microdnf-prebuilt
 
-Bazel repository capable of building `microdnf`, `rpm2archive`, and `lock` hermetically across platforms.
+Bazel repository capable of building `microdnf`, `rpm2archive`, and `dnf_lock` hermetically across platforms.
 
 ## Architecture
 
@@ -24,16 +24,16 @@ bazel run //:rpm2archive -- -o /path/to/layer.tar.zst pkg1.rpm pkg2.rpm
 bazel run //:microdnf -- rpm2archive -o /path/to/layer.tar.gz pkg1.rpm pkg2.rpm
 ```
 
-### 2. `lock`
+### 2. `dnf_lock`
 Resolves package dependency closures and emits formatted JSON lockfiles for reproducible builds and module extensions.
 - Solves complete dependency closures via `libdnf`'s solver without requiring local root privileges.
 - Outputs package details: `name`, `version`, `arch`, `nevra`, remote `url`, SRI `integrity` (`sha256-...`), hex `checksum`, and `dependencies`.
 - Pre-parses repository configuration flags (`--setopt=reposdir=...`, `--setopt=cachedir=...`, `--config=...`, `--releasever=...`, `--enablerepo=...`) prior to context setup.
-- Available as a standalone CLI (`//:lock`) and as a `microdnf` subcommand plugin (`microdnf lock`).
+- Available as a standalone CLI (`//:dnf_lock`) and as a `microdnf` subcommand plugin (`microdnf lock`).
 
 ```bash
 # Standalone CLI
-bazel run //:lock -- -o lockfile.json --setopt=reposdir=/path/to/repos.d ed bash
+bazel run //:dnf_lock -- -o lockfile.json --setopt=reposdir=/path/to/repos.d ed bash
 
 # Subcommand plugin
 bazel run //:microdnf -- lock -o lockfile.json --setopt=reposdir=/path/to/repos.d ed bash
@@ -47,10 +47,10 @@ bazel run //:microdnf -- lock -o lockfile.json --setopt=reposdir=/path/to/repos.
 
 ```bash
 # Build standalone binaries for the host
-bazel build //:microdnf //:rpm2archive //:lock
+bazel build //:microdnf //:rpm2archive //:dnf_lock
 
 # Build cross-compiled binaries for all platforms (linux_amd64, linux_arm64, osx_amd64, osx_arm64)
-bazel build //:microdnf_all //:rpm2archive_all //:lock_all
+bazel build //:microdnf_all //:rpm2archive_all //:dnf_lock_all
 ```
 
 ## License

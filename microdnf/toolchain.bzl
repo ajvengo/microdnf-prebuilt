@@ -1,11 +1,11 @@
-"""Toolchain definition for microdnf, rpm2archive, and lock binaries."""
+"""Toolchain definition for microdnf, rpm2archive, and dnf_lock binaries."""
 
 MicrodnfInfo = provider(
-    doc = "Information about the prebuilt microdnf, rpm2archive, and lock tools.",
+    doc = "Information about the prebuilt microdnf, rpm2archive, and dnf_lock tools.",
     fields = {
         "microdnf": "Target executable for microdnf.",
         "rpm2archive": "Target executable for rpm2archive.",
-        "lock": "Target executable for lock.",
+        "dnf_lock": "Target executable for dnf_lock.",
         "tool_files": "Depset of all tool files needed at execution time.",
     },
 )
@@ -21,17 +21,17 @@ def _microdnf_toolchain_impl(ctx):
         tool_files.extend(ctx.attr.microdnf.files.to_list())
     if ctx.attr.rpm2archive:
         tool_files.extend(ctx.attr.rpm2archive.files.to_list())
-    if ctx.attr.lock:
-        tool_files.extend(ctx.attr.lock.files.to_list())
+    if ctx.attr.dnf_lock:
+        tool_files.extend(ctx.attr.dnf_lock.files.to_list())
 
     microdnf_file = ctx.files.microdnf[0] if ctx.files.microdnf else None
     rpm2archive_file = ctx.files.rpm2archive[0] if ctx.files.rpm2archive else None
-    lock_file = ctx.files.lock[0] if ctx.files.lock else None
+    dnf_lock_file = ctx.files.dnf_lock[0] if ctx.files.dnf_lock else None
 
     microdnf_info = MicrodnfInfo(
         microdnf = microdnf_file,
         rpm2archive = rpm2archive_file,
-        lock = lock_file,
+        dnf_lock = dnf_lock_file,
         tool_files = depset(tool_files),
     )
 
@@ -40,8 +40,8 @@ def _microdnf_toolchain_impl(ctx):
         template_vars["MICRODNF_BIN"] = microdnf_file.path
     if rpm2archive_file:
         template_vars["RPM2ARCHIVE_BIN"] = rpm2archive_file.path
-    if lock_file:
-        template_vars["LOCK_BIN"] = lock_file.path
+    if dnf_lock_file:
+        template_vars["DNF_LOCK_BIN"] = dnf_lock_file.path
 
     return [
         platform_common.ToolchainInfo(
@@ -71,13 +71,13 @@ microdnf_toolchain = rule(
             executable = True,
             cfg = "exec",
         ),
-        "lock": attr.label(
-            doc = "The lock executable binary.",
+        "dnf_lock": attr.label(
+            doc = "The dnf_lock executable binary.",
             mandatory = False,
             allow_files = True,
             executable = True,
             cfg = "exec",
         ),
     },
-    doc = "Defines a microdnf toolchain containing microdnf, rpm2archive, and lock binaries.",
+    doc = "Defines a microdnf toolchain containing microdnf, rpm2archive, and dnf_lock binaries.",
 )

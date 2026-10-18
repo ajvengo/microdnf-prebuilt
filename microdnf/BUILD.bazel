@@ -38,8 +38,8 @@ PLATFORM_CONSTRAINTS = {
 # Host toolchain implementation selects the prebuilt binary matching host platform
 microdnf_toolchain(
     name = "toolchain_impl_host",
-    lock = select({
-        ":is_" + platform: "@lock_" + platform + "//file"
+    dnf_lock = select({
+        ":is_" + platform: "@dnf_lock_" + platform + "//file"
         for platform in SUPPORTED_PLATFORMS
     }),
     microdnf = select({
@@ -63,7 +63,7 @@ toolchain(
 [
     microdnf_toolchain(
         name = "toolchain_impl_" + platform,
-        lock = "@lock_" + platform + "//file",
+        dnf_lock = "@dnf_lock_" + platform + "//file",
         microdnf = "@microdnf_" + platform + "//file",
         rpm2archive = "@rpm2archive_" + platform + "//file",
     )

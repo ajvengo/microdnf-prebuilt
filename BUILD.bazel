@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 TARGETS = [
     "microdnf",
     "rpm2archive",
-    "lock",
+    "dnf_lock",
 ]
 
 [
@@ -32,3 +32,5 @@ TARGETS = [
     )
     for target in TARGETS
 ]
+
+
