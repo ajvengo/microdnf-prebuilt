@@ -49,15 +49,14 @@ The release source tarball (`microdnf-prebuilt-<tag>.tar.gz`) is a standalone, l
 - **Include**:
   - `microdnf/` directory (Public API):
     - `BUILD.bazel`: Defines toolchain rules and host selection.
+    - `defs.bzl`: Public macros and rule entrypoints (`rpm_archive`, `rpm_extract`, `rpm_lock`, etc.).
     - `extensions.bzl`: Public Bzlmod extension entrypoint.
     - `extension.bzl`: Public alias for `extensions.bzl`.
+    - `*.bzl`: Feature module entrypoints (`archive.bzl`, `extract.bzl`, `lock.bzl`, `package.bzl`, `prebuilt.bzl`, `providers.bzl`, `repository.bzl`).
   - `microdnf/private/` directory (Internal implementation):
     - `BUILD.bazel`: Private package boundary.
-    - `defs.bzl`: Internal definitions.
-    - `toolchain.bzl`: Implements `microdnf_toolchain` rule and `MicrodnfInfo` provider.
-    - `extensions.bzl`: Implements `microdnf_prebuilt_extension` and host alias repository rules.
+    - `*.bzl`: Implementation files (`archive.bzl`, `extract.bzl`, `extensions.bzl`, `integrities.bzl`, `lock.bzl`, `package.bzl`, `platforms.bzl`, `prebuilt.bzl`, `providers.bzl`, `repository.bzl`, `toolchain.bzl`).
     - `integrities.bzl`: Dynamically generated file containing SRI hashes and URLs for prebuilt binaries.
-    - `platforms.bzl`: Supported target platforms definitions.
   - Root `BUILD.bazel`: Minimal public visibility rule (`package(default_visibility = ["//visibility:public"])`).
   - Root `MODULE.bazel`: Stripped module file.
 
@@ -83,6 +82,7 @@ Cross-compilation is supported for 4 platforms:
 1. **`microdnf`**: Standalone multi-command package manager.
 2. **`rpm2archive`**: Standalone tool converting RPM package lists into deduplicated container layers.
 3. **`dnf_lock`**: Standalone dependency solver emitting JSON lockfiles.
+4. **`rpm2files`**: Standalone Go-based tool for extracting files from RPM packages.
 
 ### Tool Naming Protocol
 - The dependency solver is named **`dnf_lock`** across the entire repository (`//:dnf_lock`, `//dnf:dnf_lock`, `@dnf_lock//:dnf_lock`).
@@ -94,7 +94,8 @@ Modeled after `jq_host_alias_repo` in `bazel-contrib/jq.bzl`:
   - `@microdnf//:microdnf`
   - `@rpm2archive//:rpm2archive`
   - `@dnf_lock//:dnf_lock`
-- Each repository rule (`microdnf_host_alias_repo`, `rpm2archive_host_alias_repo`, `dnf_lock_host_alias_repo`) inspects `rctx.os.name` and `rctx.os.arch` to alias directly to the matching `@<tool>_<platform>//file`.
+  - `@rpm2files//:rpm2files`
+- Each repository rule (`microdnf_host_alias_repo`, `rpm2archive_host_alias_repo`, `dnf_lock_host_alias_repo`, `rpm2files_host_alias_repo`) inspects `rctx.os.name` and `rctx.os.arch` to alias directly to the matching `@<tool>_<platform>//file`.
 
 ### Upstream Repository Naming (`microdnf_src`)
 - In `bazel/extensions.bzl`, the upstream source git repository is named **`microdnf_src`** (not `microdnf`).

@@ -29,7 +29,7 @@ mkdir -p release_assets
 
 BASE_URL="https://github.com/bookingcom/microdnf-prebuilt/releases/download/${TAG}"
 
-# 1. Collect all 12 prebuilt binaries and compute integrity hashes
+# 1. Collect all 16 prebuilt binaries and compute integrity hashes
 declare -A INTEGRITIES
 
 for target in dnf_lock microdnf rpm2archive rpm2files; do
@@ -130,18 +130,36 @@ register_toolchains(
 )
 EOF
 
-# Copy microdnf public files (BUILD.bazel, extensions.bzl, extension.bzl)
+# Copy microdnf public files (*.bzl and BUILD.bazel)
+cp microdnf/*.bzl "${PKG_DIR}/microdnf/"
 cp microdnf/BUILD.bazel "${PKG_DIR}/microdnf/BUILD.bazel"
-cp microdnf/extensions.bzl "${PKG_DIR}/microdnf/extensions.bzl"
-cp microdnf/extension.bzl "${PKG_DIR}/microdnf/extension.bzl"
 
-# Copy microdnf private files
+# Copy microdnf private files (*.bzl and BUILD.bazel)
+cp microdnf/private/*.bzl "${PKG_DIR}/microdnf/private/"
 cp microdnf/private/BUILD.bazel "${PKG_DIR}/microdnf/private/BUILD.bazel"
-cp microdnf/private/defs.bzl "${PKG_DIR}/microdnf/private/defs.bzl"
-cp microdnf/private/toolchain.bzl "${PKG_DIR}/microdnf/private/toolchain.bzl"
-cp microdnf/private/extensions.bzl "${PKG_DIR}/microdnf/private/extensions.bzl"
-cp microdnf/private/integrities.bzl "${PKG_DIR}/microdnf/private/integrities.bzl"
-cp microdnf/private/platforms.bzl "${PKG_DIR}/microdnf/private/platforms.bzl"
+
+# In packaged microdnf/BUILD.bazel, bind rpm2files alias to prebuilt binary select
+python3 -c '
+with open("'"${PKG_DIR}"'/microdnf/BUILD.bazel", "r") as f:
+    content = f.read()
+target = """alias(
+    name = "rpm2files",
+    actual = "//rpm2files:rpm2files",
+    visibility = ["//visibility:public"],
+)"""
+replacement = """alias(
+    name = "rpm2files",
+    actual = select({
+        ":is_" + platform: "@rpm2files_" + platform + "//file"
+        for platform in SUPPORTED_PLATFORMS
+    }),
+    visibility = ["//visibility:public"],
+)"""
+if target in content:
+    content = content.replace(target, replacement)
+    with open("'"${PKG_DIR}"'/microdnf/BUILD.bazel", "w") as f:
+        f.write(content)
+'
 
 # 4. Create release tarball archive
 ARCHIVE_NAME="${TAG}.tar.gz"
