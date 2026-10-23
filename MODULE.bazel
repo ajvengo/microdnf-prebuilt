@@ -132,7 +132,11 @@ rpm.repository(
         "//e2e/testdata:aarch64.lock.json",
     ],
 )
-use_repo(rpm, "test_rpms")
+rpm.repository(
+    name = "test_transaction_rpms",
+    lock_files = ["//e2e/testdata:transaction.lock.json"],
+)
+use_repo(rpm, "test_rpms", "test_transaction_rpms")
 
 # Upstream microdnf tracked as a bzlmod extension
 microdnf = use_extension(

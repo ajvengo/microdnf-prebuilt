@@ -511,8 +511,8 @@
     },
     "//microdnf:extensions.bzl%rpm": {
       "general": {
-        "bzlTransitiveDigest": "1m8KWLRZKH9eD4iJ3ovFnZR04vn4BuPIIALumCHoydY=",
-        "usagesDigest": "G4xDQwbT+beGt4/2nChyemszdh5PPOvpdhGUg3vPKsY=",
+        "bzlTransitiveDigest": "sD+itUEeU7OnUMtqIlq1uolC8Lo7+iOEx8vkHYTLfJE=",
+        "usagesDigest": "gRJjsnKJptxlgk2PX8zXZeab+6qCJjeLlcvcDDNIZBM=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"
         ],
@@ -523,6 +523,14 @@
               "lock_files": [
                 "@@//e2e/testdata:x86_64.lock.json",
                 "@@//e2e/testdata:aarch64.lock.json"
+              ]
+            }
+          },
+          "test_transaction_rpms": {
+            "repoRuleId": "@@//microdnf/private:repository.bzl%rpm_repository",
+            "attributes": {
+              "lock_files": [
+                "@@//e2e/testdata:transaction.lock.json"
               ]
             }
           }
