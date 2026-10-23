@@ -64,6 +64,8 @@ sh_test(
         "//e2e/testdata:installroot/var/lib/rpm/rpmdb.sqlite",
         "//e2e/testdata:installroot_files",
     ],
+    # One section per shard (see SECTIONS in the script).
+    shard_count = 8,
 )
 
 # rpm_lock on top of a parent image root, with dnf solver options
