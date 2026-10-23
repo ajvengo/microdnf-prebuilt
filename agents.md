@@ -111,6 +111,9 @@ All Bazel commands (`build`, `test`, `run`, `cquery`, `query`, etc.) must be inv
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel <command> --invocation_id=${INVOCATION_ID} <args>
 ```
 
+The ID is printed before Bazel starts, so a run can be found in BuildBuddy (`/invocation/<id>`) and in logs while
+it is still going, or after it was killed.
+
 ### Remote Execution, Cache & Output Download Modes
 - **Zero Disk Cache & Zero Repository Cache**: Local runner disk caching (`disk-cache: false`) and repository caching (`repository-cache: false`) are disabled entirely across CI and Release workflows. In addition, `build:rbe` sets `--disk_cache=` and `--repository_cache=`. This ensures all builds query and populate BuildBuddy remote cache and CAS consistently without runner disk caching divergence.
 - **Remote Cache Chunking**: Enabled `--experimental_remote_cache_chunking` in `.bazelrc` and CI configuration to chunk large blobs via FastCDC, optimizing remote CAS storage and transfer efficiency.
