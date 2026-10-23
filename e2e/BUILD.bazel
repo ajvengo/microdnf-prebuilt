@@ -1,6 +1,8 @@
 load("@rules_bazel_integration_test//bazel_integration_test:defs.bzl", "bazel_integration_test", "default_test_runner")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//microdnf:defs.bzl", "rpm_archive", "rpm_extract", "rpm_lock")
+load(":repository_test.bzl", "repository_test_suite")
+load(":rpm_listing.bzl", "rpm_listing")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -125,6 +127,9 @@ sh_test(
     ],
 )
 
+# rpm_repository BUILD generation: reserved 'transaction' name
+repository_test_suite(name = "repository_unit_tests")
+
 # Step 3 test: RPM proxy repository test
 sh_test(
     name = "test_rpm_repository_test",
@@ -152,6 +157,53 @@ sh_test(
     ],
     data = [
         ":tour_archive",
+    ],
+)
+
+# Transaction graph: weak deps, installed-root packages and satisfied requests
+rpm_listing(
+    name = "wapp_listing",
+    rpm = "@test_transaction_rpms//:wapp",
+)
+
+rpm_listing(
+    name = "transaction_listing",
+    rpm = "@test_transaction_rpms//:transaction",
+)
+
+rpm_listing(
+    name = "satisfied_listing",
+    rpm = "@test_transaction_rpms//:satisfied",
+)
+
+rpm_archive(
+    name = "satisfied_archive",
+    compression = "gzip",
+    rpms = ["@test_transaction_rpms//:satisfied"],
+)
+
+rpm_archive(
+    name = "satisfied_zstd_archive",
+    compression = "zstd",
+    rpms = ["@test_transaction_rpms//:satisfied"],
+)
+
+sh_test(
+    name = "test_transaction_test",
+    srcs = ["test_transaction.sh"],
+    args = [
+        "$(location :wapp_listing)",
+        "$(location :transaction_listing)",
+        "$(location :satisfied_listing)",
+        "$(location :satisfied_archive)",
+        "$(location :satisfied_zstd_archive)",
+    ],
+    data = [
+        ":satisfied_archive",
+        ":satisfied_zstd_archive",
+        ":satisfied_listing",
+        ":transaction_listing",
+        ":wapp_listing",
     ],
 )
 
