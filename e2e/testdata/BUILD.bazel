@@ -80,3 +80,40 @@ filegroup(
         "installroot/var/lib/rpm/rpmdb.sqlite",
     ],
 )
+
+# Only the rpmdb: the root must still resolve to the image root (not var/lib/rpm).
+filegroup(
+    name = "installroot_rpmdb_only",
+    srcs = ["installroot/var/lib/rpm/rpmdb.sqlite"],
+)
+
+# Same image in the usr/lib/sysimage/rpm layout.
+genrule(
+    name = "sysimage_root",
+    srcs = [
+        "installroot/usr/lib/os-release",
+        "installroot/var/lib/rpm/rpmdb.sqlite",
+    ],
+    outs = [
+        "sysimage-root/usr/lib/os-release",
+        "sysimage-root/usr/lib/sysimage/rpm/rpmdb.sqlite",
+    ],
+    cmd = "cp $(location installroot/usr/lib/os-release) $(location sysimage-root/usr/lib/os-release) && " +
+          "cp $(location installroot/var/lib/rpm/rpmdb.sqlite) $(location sysimage-root/usr/lib/sysimage/rpm/rpmdb.sqlite)",
+)
+
+# Mixed source and generated files: checked-in os-release, generated rpmdb.
+genrule(
+    name = "mixed_root_rpmdb",
+    srcs = ["installroot/var/lib/rpm/rpmdb.sqlite"],
+    outs = ["mixed-root/var/lib/rpm/rpmdb.sqlite"],
+    cmd = "cp $< $@",
+)
+
+filegroup(
+    name = "mixed_root",
+    srcs = [
+        "mixed-root/usr/lib/os-release",
+        ":mixed_root_rpmdb",
+    ],
+)
