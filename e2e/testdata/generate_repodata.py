@@ -166,7 +166,7 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 # Each tuple: (name, epoch, version, release, arch, {dependency type: [entries]}).
 # Entries are a bare name, a rich dependency "(...)", or (name, flags, version).
 FEATURE_PACKAGES = [
-    # --installroot: libfoo-1.0, oldtool, rich-cond and condhost are in the seeded rpmdb.
+    # --installroot: libfoo-1.0, oldtool, rich-cond, condhost and dgtool-2.0 are in the seeded rpmdb.
     ("libfoo", 0, "1.0", "1", "noarch", {}),
     ("libfoo", 0, "2.0", "1", "noarch", {}),
     ("oldtool", 0, "1.0", "1", "noarch", {"recommends": ["optional-x"]}),
@@ -182,6 +182,10 @@ FEATURE_PACKAGES = [
     # best / nobest: the newest bestapp is not installable.
     ("bestapp", 0, "1.0", "1", "noarch", {}),
     ("bestapp", 0, "2.0", "1", "noarch", {"requires": ["missing-lib"]}),
+    # Downgrades: dgtool-2.0 is in the seeded rpmdb, the repo carries both versions.
+    ("dgtool", 0, "1.0", "1", "noarch", {}),
+    ("dgtool", 0, "2.0", "1", "noarch", {}),
+    ("dgapp", 0, "1.0", "1", "noarch", {"requires": ["dgtool"]}),
     # Rich dependencies.
     ("richapp", 0, "1.0", "1", "noarch", {"requires": ["(rich-a if rich-cond)", "(rich-b or rich-c)"]}),
     ("rich-a", 0, "1.0", "1", "noarch", {}),

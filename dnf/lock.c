@@ -75,6 +75,33 @@ select_one_pkg_for_nevra (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
   return pkgs_to_use;
 }
 
+static void
+filter_archlist (HyQuery query, const gchar *archlist)
+{
+  g_auto(GStrv) archs = g_strsplit_set (archlist, ", ", -1);
+  hy_query_filter_in (query, HY_PKG_ARCH, HY_EQ, (const char **)archs);
+}
+
+/* Query for one package spec, like `dnf install <spec>`: system packages are
+ * left out; with @latest only the newest candidate per arch survives. The
+ * @opt_archlist restriction, if any, is applied last. */
+static HyQuery
+get_spec_query (DnfSack *sack, const gchar *spec, gboolean latest, const gchar *opt_archlist)
+{
+  g_auto(HySubject) subject = hy_subject_create (spec);
+  HyNevra out_nevra = NULL;
+  HyQuery key_query = hy_subject_get_best_solution (subject, sack, NULL, &out_nevra,
+                                                    FALSE, TRUE, TRUE, TRUE, FALSE);
+  if (out_nevra)
+    hy_nevra_free (out_nevra);
+  hy_query_filter (key_query, HY_PKG_REPONAME, HY_NEQ, HY_SYSTEM_REPO_NAME);
+  if (latest)
+    hy_query_filter_num (key_query, HY_PKG_LATEST_PER_ARCH_BY_PRIORITY, HY_EQ, 1);
+  if (opt_archlist)
+    filter_archlist (key_query, opt_archlist);
+  return key_query;
+}
+
 static HyQuery
 get_packages_query (DnfContext *ctx, GStrv pkgs_spec, const gchar *opt_archlist)
 {
@@ -86,26 +113,28 @@ get_packages_query (DnfContext *ctx, GStrv pkgs_spec, const gchar *opt_archlist)
       hy_query_filter_empty (query);
       for (char **pkey = pkgs_spec; *pkey; ++pkey)
         {
-          g_auto(HySubject) subject = hy_subject_create (*pkey);
-          HyNevra out_nevra = NULL;
-          hy_autoquery HyQuery key_query =
-            hy_subject_get_best_solution (subject, sack, NULL, &out_nevra,
-                                          FALSE, TRUE, TRUE, TRUE, FALSE);
-          if (out_nevra)
-            hy_nevra_free (out_nevra);
-          hy_query_filter (key_query, HY_PKG_REPONAME, HY_NEQ, HY_SYSTEM_REPO_NAME);
-          hy_query_filter_num (key_query, HY_PKG_LATEST_PER_ARCH_BY_PRIORITY, HY_EQ, 1);
+          hy_autoquery HyQuery key_query = get_spec_query (sack, *pkey, TRUE, NULL);
           hy_query_union (query, key_query);
         }
     }
 
   if (opt_archlist)
-    {
-      g_auto(GStrv) archs_array = g_strsplit_set (opt_archlist, ", ", -1);
-      hy_query_filter_in (query, HY_PKG_ARCH, HY_EQ, (const char **)archs_array);
-    }
+    filter_archlist (query, opt_archlist);
 
   return query;
+}
+
+/* Joins @base and @path with exactly one "/" between them. */
+static gchar *
+join_url_path (const char *base, const char *path)
+{
+  gboolean base_slash = g_str_has_suffix (base, "/");
+  gboolean path_slash = (path[0] == '/');
+  if (base_slash && path_slash)
+    return g_strdup_printf ("%s%s", base, path + 1);
+  if (!base_slash && !path_slash)
+    return g_strdup_printf ("%s/%s", base, path);
+  return g_strdup_printf ("%s%s", base, path);
 }
 
 static gchar *
@@ -158,14 +187,7 @@ resolve_package_url (DnfPackage *pkg, DnfContext *ctx)
   g_autofree gchar *full_base = NULL;
   if (repo_base_url && pkg_base && !strstr (pkg_base, "://"))
     {
-      gboolean r_slash = g_str_has_suffix (repo_base_url, "/");
-      gboolean p_slash = (pkg_base[0] == '/');
-      if (r_slash && p_slash)
-        full_base = g_strdup_printf ("%s%s", repo_base_url, pkg_base + 1);
-      else if (!r_slash && !p_slash)
-        full_base = g_strdup_printf ("%s/%s", repo_base_url, pkg_base);
-      else
-        full_base = g_strdup_printf ("%s%s", repo_base_url, pkg_base);
+      full_base = join_url_path (repo_base_url, pkg_base);
     }
   else if (pkg_base && strstr (pkg_base, "://"))
     {
@@ -182,20 +204,9 @@ resolve_package_url (DnfPackage *pkg, DnfContext *ctx)
 
   gchar *res = NULL;
   if (full_base)
-    {
-      gboolean base_has_slash = g_str_has_suffix (full_base, "/");
-      gboolean loc_has_slash = (loc[0] == '/');
-      if (base_has_slash && loc_has_slash)
-        res = g_strdup_printf ("%s%s", full_base, loc + 1);
-      else if (!base_has_slash && !loc_has_slash)
-        res = g_strdup_printf ("%s/%s", full_base, loc);
-      else
-        res = g_strdup_printf ("%s%s", full_base, loc);
-    }
+    res = join_url_path (full_base, loc);
   else
-    {
-      res = g_strdup (loc);
-    }
+    res = g_strdup (loc);
 
   if (g_str_has_prefix (res, "file://"))
     {
@@ -263,6 +274,37 @@ split_option_values (GStrv values)
   return (GStrv)g_ptr_array_free (g_steal_pointer (&out), FALSE);
 }
 
+/* Parses a boolean option value the way libdnf/microdnf do: 1/0, yes/no,
+ * true/false, on/off, case-insensitive. Anything else is an error. */
+gboolean
+lock_parse_bool (const gchar *name, const gchar *value, gboolean default_value,
+                 gboolean *out, GError **error)
+{
+  if (!value || !*value)
+    {
+      *out = default_value;
+      return TRUE;
+    }
+  static const gchar *const truthy[] = { "1", "yes", "true", "on", NULL };
+  static const gchar *const falsy[] = { "0", "no", "false", "off", NULL };
+  for (const gchar *const *v = truthy; *v; ++v)
+    if (g_ascii_strcasecmp (value, *v) == 0)
+      {
+        *out = TRUE;
+        return TRUE;
+      }
+  for (const gchar *const *v = falsy; *v; ++v)
+    if (g_ascii_strcasecmp (value, *v) == 0)
+      {
+        *out = FALSE;
+        return TRUE;
+      }
+  g_set_error (error, DNF_ERROR, DNF_ERROR_FAILED,
+               "Invalid boolean value '%s' for %s (expected 1/0, yes/no, true/false or on/off)",
+               value, name);
+  return FALSE;
+}
+
 /* dnf's "best" is opt-in in libdnf (default False) but every EL dnf.conf sets
  * best=True, and the lockfile has always pinned the newest candidate. Keep
  * that unless --nobest was given or "best" was set explicitly (config file,
@@ -282,10 +324,11 @@ lock_use_best (gboolean opt_best, gboolean opt_nobest)
 }
 
 /* Whether an installed package already satisfies a request for @pkg the way
- * `dnf install` reports "already installed": same name and arch, same or
- * newer version. */
+ * `dnf install` reports "already installed": same name and arch, and the same
+ * version, or a newer one unless the request pinned @pkg's version explicitly
+ * (`dnf install foo-1.0` on a newer foo is a downgrade). */
 static gboolean
-is_satisfied_by_installed (DnfSack *sack, DnfPackage *pkg)
+is_satisfied_by_installed (DnfSack *sack, DnfPackage *pkg, gboolean pinned)
 {
   hy_autoquery HyQuery q = hy_query_create (sack);
   hy_query_filter (q, HY_PKG_REPONAME, HY_EQ, HY_SYSTEM_REPO_NAME);
@@ -294,7 +337,8 @@ is_satisfied_by_installed (DnfSack *sack, DnfPackage *pkg)
   g_autoptr(GPtrArray) installed = hy_query_run (q);
   for (guint i = 0; i < installed->len; ++i)
     {
-      if (dnf_package_evr_cmp (g_ptr_array_index (installed, i), pkg) >= 0)
+      int cmp = dnf_package_evr_cmp (g_ptr_array_index (installed, i), pkg);
+      if (cmp == 0 || (cmp > 0 && !pinned))
         return TRUE;
     }
   return FALSE;
@@ -318,9 +362,11 @@ installroot_has_rpmdb (const gchar *root)
   return FALSE;
 }
 
-/* Adds edges pkg -> providers of @reqs that are part of the resolved set. */
+/* Adds edges pkg -> providers of @reqs. @resolved_query is an applied query
+ * holding only the resolved packages; each lookup runs on a clone of it, so
+ * the provider search never leaves the resolved set (and never scans the sack). */
 static void
-add_reldep_edges (HyQuery dep_query, GHashTable *id_to_pkg, DnfReldepList *reqs,
+add_reldep_edges (HyQuery resolved_query, DnfReldepList *reqs,
                   const char *pkg_name, GHashTable *dep_names, GHashTable *dep_nevras)
 {
   if (!reqs)
@@ -329,16 +375,14 @@ add_reldep_edges (HyQuery dep_query, GHashTable *id_to_pkg, DnfReldepList *reqs,
   for (int r = 0; r < n_reqs; ++r)
     {
       DnfReldep *reldep = dnf_reldep_list_index (reqs, r);
-      hy_query_filter_reldep (dep_query, HY_PKG_PROVIDES, reldep);
-      g_autoptr(GPtrArray) providers = hy_query_run (dep_query);
-      hy_query_clear (dep_query);
+      hy_autoquery HyQuery q = hy_query_clone (resolved_query);
+      hy_query_filter_reldep (q, HY_PKG_PROVIDES, reldep);
+      g_autoptr(GPtrArray) providers = hy_query_run (q);
       dnf_reldep_free (reldep);
 
       for (guint p = 0; p < providers->len; ++p)
         {
           DnfPackage *prov = g_ptr_array_index (providers, p);
-          if (!g_hash_table_contains (id_to_pkg, GUINT_TO_POINTER (dnf_package_get_id (prov))))
-            continue;
           const char *prov_name = dnf_package_get_name (prov);
           if (g_strcmp0 (prov_name, pkg_name) == 0)
             continue;
@@ -350,13 +394,59 @@ add_reldep_edges (HyQuery dep_query, GHashTable *id_to_pkg, DnfReldepList *reqs,
   dnf_reldep_list_free (reqs);
 }
 
+/* A set of owned strings. */
+static GHashTable *
+string_set_new (void)
+{
+  return g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+}
+
+/* The sorted contents of the string set @set as a JSON array, limited to
+ * entries also in @only_in (if given) and without @skip (if given). */
+static struct json_object *
+sorted_set_array (GHashTable *set, GHashTable *only_in, const char *skip)
+{
+  struct json_object *arr = json_object_new_array ();
+  if (!set)
+    return arr;
+  GList *keys = g_list_sort (g_hash_table_get_keys (set), (GCompareFunc)strcmp);
+  for (GList *l = keys; l; l = l->next)
+    {
+      if (only_in && !g_hash_table_contains (only_in, l->data))
+        continue;
+      if (skip && g_strcmp0 (l->data, skip) == 0)
+        continue;
+      json_object_array_add (arr, json_object_new_string ((const char *)l->data));
+    }
+  g_list_free (keys);
+  return arr;
+}
+
+/* Marks @name reachable and queues it for expansion, unless already marked. */
+static void
+mark_reachable (GHashTable *reachable, GQueue *queue, const char *name)
+{
+  if (g_hash_table_contains (reachable, name))
+    return;
+  g_hash_table_add (reachable, g_strdup (name));
+  g_queue_push_tail (queue, g_strdup (name));
+}
+
+/* Appends a new reference to every element of @src (which may be NULL) to @dst. */
+static void
+ptr_array_add_refs (GPtrArray *dst, GPtrArray *src)
+{
+  for (guint i = 0; src && i < src->len; ++i)
+    g_ptr_array_add (dst, g_object_ref (g_ptr_array_index (src, i)));
+}
+
 static GHashTable *
 lookup_or_new_set (GHashTable *map, const char *key)
 {
   GHashTable *set = g_hash_table_lookup (map, key);
   if (!set)
     {
-      set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+      set = string_set_new ();
       g_hash_table_insert (map, g_strdup (key), set);
     }
   return set;
@@ -450,21 +540,15 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
           return FALSE;
         }
     }
-
-  /* Solve for the target architecture, not the host's: otherwise libsolv
-   * rejects e.g. x86_64 packages on an arm64 host as incompatible. */
-  g_autofree gchar *solve_arch = g_strdup (opt_forcearch);
-  if (!solve_arch && opt_archlist)
+  else if (install_root && g_strcmp0 (install_root, "/") != 0)
     {
-      g_auto(GStrv) archs = g_strsplit_set (opt_archlist, ", ", -1);
-      for (char **a = archs; *a && !solve_arch; ++a)
-        {
-          if (**a && g_strcmp0 (*a, "noarch") != 0 && g_strcmp0 (*a, "src") != 0)
-            solve_arch = g_strdup (*a);
-        }
+      g_autofree gchar *usr_dir = g_build_filename (install_root, "usr", NULL);
+      if (g_file_test (usr_dir, G_FILE_TEST_IS_DIR))
+        g_printerr ("warning: install root %s has no rpmdb (looked for "
+                    "var/lib/rpm/{rpmdb.sqlite,Packages.db,Packages} and "
+                    "usr/lib/sysimage/rpm/{rpmdb.sqlite,Packages.db,Packages}); "
+                    "treating it as an empty image\n", install_root);
     }
-  if (solve_arch)
-    dnf_context_set_arch (ctx, solve_arch);
 
   DnfState *state = dnf_context_get_state (ctx);
   if (!dnf_context_setup_sack_with_flags (ctx, state,
@@ -500,19 +584,37 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
    * requested name/arch, preferring the newest. On top of an install root,
    * requests that are already installed (same or newer) are no-ops. */
   HyGoal goal = hy_goal_create (sack);
-  for (guint i = 0; i < target_pkgs->len; ++i)
+  for (char **spec = opt_packages; *spec; ++spec)
     {
-      DnfPackage *pkg = g_ptr_array_index (target_pkgs, i);
-      if (use_rpmdb && is_satisfied_by_installed (sack, pkg))
+      hy_autoquery HyQuery latest_query = get_spec_query (sack, *spec, TRUE, opt_archlist);
+      g_autoptr(GPtrArray) spec_pkgs = hy_query_run (latest_query);
+      const gboolean pinned = lock_spec_pins_version (sack, *spec);
+
+      g_autoptr(GPtrArray) wanted = g_ptr_array_new ();
+      for (guint i = 0; i < spec_pkgs->len; ++i)
+        {
+          DnfPackage *pkg = g_ptr_array_index (spec_pkgs, i);
+          if (!(use_rpmdb && is_satisfied_by_installed (sack, pkg, pinned)))
+            g_ptr_array_add (wanted, pkg);
+        }
+      if (wanted->len == 0)
         continue;
+
       if (use_best)
         {
-          hy_goal_install (goal, pkg);
+          for (guint i = 0; i < wanted->len; ++i)
+            hy_goal_install (goal, g_ptr_array_index (wanted, i));
           continue;
         }
+
+      /* --nobest: let the solver pick among the candidates of the request. The
+       * selector is built from the spec itself, so a pinned version, release or
+       * arch stays a constraint; only unconstrained parts may fall back. */
+      hy_autoquery HyQuery all_query = get_spec_query (sack, *spec, FALSE, opt_archlist);
       HySelector sltr = hy_selector_create (sack);
-      hy_selector_set (sltr, HY_PKG_NAME, HY_EQ, dnf_package_get_name (pkg));
-      hy_selector_set (sltr, HY_PKG_ARCH, HY_EQ, dnf_package_get_arch (pkg));
+      DnfPackageSet *pset = hy_query_run_set (all_query);
+      hy_selector_pkg_set (sltr, pset);
+      dnf_packageset_free (pset);
       gboolean ok = hy_goal_install_selector (goal, sltr, error);
       hy_selector_free (sltr);
       if (!ok)
@@ -528,8 +630,12 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       g_autofree gchar *autodetect = dnf_conf_main_get_option ("exclude_from_weak_autodetect", &prio, NULL);
       g_autofree gchar *weak_excl = dnf_conf_main_get_option ("exclude_from_weak", &prio, NULL);
       g_auto(GStrv) weak_excl_v = g_strsplit_set (weak_excl ? weak_excl : "", ", ", -1);
-      gboolean autodetect_on = !autodetect || g_ascii_strcasecmp (autodetect, "true") == 0 ||
-                               g_strcmp0 (autodetect, "1") == 0;
+      gboolean autodetect_on = TRUE;
+      if (!lock_parse_bool ("exclude_from_weak_autodetect", autodetect, TRUE, &autodetect_on, error))
+        {
+          hy_goal_free (goal);
+          return FALSE;
+        }
       lock_goal_exclude_from_weak (goal, sack, autodetect_on, (const gchar * const *)weak_excl_v);
     }
 
@@ -551,14 +657,15 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
   g_autoptr(GPtrArray) all_pkgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
   if (use_best && !use_rpmdb)
-    {
-      for (guint i = 0; i < target_pkgs->len; ++i)
-        g_ptr_array_add (all_pkgs, g_object_ref (g_ptr_array_index (target_pkgs, i)));
-    }
+    ptr_array_add_refs (all_pkgs, target_pkgs);
   ptr_array_extend_and_steal (all_pkgs, hy_goal_list_installs (goal, NULL));
-  g_autoptr(GPtrArray) upgrades = hy_goal_list_upgrades (goal, NULL);
-  for (guint i = 0; upgrades && i < upgrades->len; ++i)
-    g_ptr_array_add (all_pkgs, g_object_ref (g_ptr_array_index (upgrades, i)));
+  /* Upgrades and downgrades replace an installed package of the same name. */
+  g_autoptr(GPtrArray) upgrades = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+  g_autoptr(GPtrArray) upgrades_list = hy_goal_list_upgrades (goal, NULL);
+  g_autoptr(GPtrArray) downgrades_list = hy_goal_list_downgrades (goal, NULL);
+  ptr_array_add_refs (upgrades, upgrades_list);
+  ptr_array_add_refs (upgrades, downgrades_list);
+  ptr_array_add_refs (all_pkgs, upgrades);
 
   /* Installed packages the transaction replaces or removes (install root only) */
   g_autoptr(GHashTable) replaces = g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
@@ -577,33 +684,25 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
         }
       g_autoptr(GPtrArray) erasures = hy_goal_list_erasures (goal, NULL);
       g_autoptr(GPtrArray) obsoleted = hy_goal_list_obsoleted (goal, NULL);
-      for (guint i = 0; erasures && i < erasures->len; ++i)
-        g_ptr_array_add (removed, g_object_ref (g_ptr_array_index (erasures, i)));
-      for (guint i = 0; obsoleted && i < obsoleted->len; ++i)
-        g_ptr_array_add (removed, g_object_ref (g_ptr_array_index (obsoleted, i)));
+      ptr_array_add_refs (removed, erasures);
+      ptr_array_add_refs (removed, obsoleted);
     }
   hy_goal_free (goal);
 
   DnfRepoLoader *repo_loader = dnf_context_get_repo_loader (ctx);
   g_autoptr(GPtrArray) resolved = select_one_pkg_for_nevra (repo_loader, all_pkgs);
 
-  /* Build fast lookup maps: ID -> DnfPackage, and NEVRA -> DnfPackage, and NAME -> DnfPackage */
-  g_autoptr(GHashTable) id_to_pkg = g_hash_table_new (g_direct_hash, g_direct_equal);
-  g_autoptr(GHashTable) nevra_to_pkg = g_hash_table_new (g_str_hash, g_str_equal);
-  g_autoptr(GHashTable) name_to_pkg = g_hash_table_new (g_str_hash, g_str_equal);
-
+  /* Names of the resolved packages */
+  g_autoptr(GHashTable) resolved_names = g_hash_table_new (g_str_hash, g_str_equal);
   for (guint i = 0; i < resolved->len; ++i)
     {
-      DnfPackage *pkg = g_ptr_array_index (resolved, i);
-      g_hash_table_insert (id_to_pkg, GUINT_TO_POINTER (dnf_package_get_id (pkg)), pkg);
-      g_hash_table_insert (nevra_to_pkg, (gpointer)dnf_package_get_nevra (pkg), pkg);
-      const char *name = dnf_package_get_name (pkg);
+      const char *name = dnf_package_get_name (g_ptr_array_index (resolved, i));
       if (name)
-        g_hash_table_insert (name_to_pkg, (gpointer)name, pkg);
+        g_hash_table_add (resolved_names, (gpointer)name);
     }
 
   /* Identify directly requested package names */
-  g_autoptr(GHashTable) directly_requested = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  g_autoptr(GHashTable) directly_requested = string_set_new ();
   for (guint i = 0; i < target_pkgs->len; ++i)
     {
       DnfPackage *pkg = g_ptr_array_index (target_pkgs, i);
@@ -613,23 +712,18 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     }
 
   /* Parse exclude package names */
-  g_autoptr(GHashTable) exclude_set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
-  if (opt_exclude)
-    {
-      for (char **ex = opt_exclude; *ex; ++ex)
-        {
-          g_auto(GStrv) tokens = g_strsplit_set (*ex, ", ", -1);
-          for (char **tok = tokens; *tok; ++tok)
-            {
-              g_strstrip (*tok);
-              if (**tok)
-                g_hash_table_add (exclude_set, g_strdup (*tok));
-            }
-        }
-    }
+  g_autoptr(GHashTable) exclude_set = string_set_new ();
+  g_auto(GStrv) exclude_names = split_option_values (opt_exclude);
+  for (char **ex = exclude_names; *ex; ++ex)
+    g_hash_table_add (exclude_set, g_strdup (*ex));
 
   /* Discover direct dependencies of each resolved package */
+  g_autoptr(DnfPackageSet) resolved_set = dnf_packageset_new (sack);
+  for (guint i = 0; i < resolved->len; ++i)
+    dnf_packageset_add (resolved_set, g_ptr_array_index (resolved, i));
   hy_autoquery HyQuery dep_query = hy_query_create (sack);
+  hy_query_filter_package_in (dep_query, HY_PKG, HY_EQ, resolved_set);
+  hy_query_apply (dep_query);
   g_autoptr(GHashTable) pkg_direct_deps = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_hash_table_unref);
   g_autoptr(GHashTable) pkg_direct_nevras = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_hash_table_unref);
   /* Weak edges (Recommends, reverse Supplements): used to keep weak deps the
@@ -643,19 +737,19 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       if (!pkg_name)
         continue;
 
-      GHashTable *dep_names = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
-      GHashTable *dep_nevras = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
-      add_reldep_edges (dep_query, id_to_pkg, dnf_package_get_requires (pkg), pkg_name, dep_names, dep_nevras);
+      GHashTable *dep_names = string_set_new ();
+      GHashTable *dep_nevras = string_set_new ();
+      add_reldep_edges (dep_query, dnf_package_get_requires (pkg), pkg_name, dep_names, dep_nevras);
       g_hash_table_insert (pkg_direct_deps, g_strdup (pkg_name), dep_names);
       g_hash_table_insert (pkg_direct_nevras, g_strdup (pkg_name), dep_nevras);
 
       if (!weak_deps)
         continue;
-      add_reldep_edges (dep_query, id_to_pkg, dnf_package_get_recommends (pkg), pkg_name,
+      add_reldep_edges (dep_query, dnf_package_get_recommends (pkg), pkg_name,
                         lookup_or_new_set (pkg_weak_deps, pkg_name), NULL);
       /* pkg Supplements X: edge X -> pkg */
-      g_autoptr(GHashTable) supplemented = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
-      add_reldep_edges (dep_query, id_to_pkg, dnf_package_get_supplements (pkg), pkg_name, supplemented, NULL);
+      g_autoptr(GHashTable) supplemented = string_set_new ();
+      add_reldep_edges (dep_query, dnf_package_get_supplements (pkg), pkg_name, supplemented, NULL);
       GHashTableIter sup_it;
       gpointer sup_name;
       g_hash_table_iter_init (&sup_it, supplemented);
@@ -664,7 +758,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     }
 
   /* Excluded packages: those in exclude_set UNLESS directly requested */
-  g_autoptr(GHashTable) excluded_pkgs = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  g_autoptr(GHashTable) excluded_pkgs = string_set_new ();
   GHashTableIter ex_iter;
   gpointer ex_key;
   g_hash_table_iter_init (&ex_iter, exclude_set);
@@ -675,7 +769,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     }
 
   /* Graph reachability: packages reachable from directly_requested without going through excluded_pkgs */
-  g_autoptr(GHashTable) reachable = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  g_autoptr(GHashTable) reachable = string_set_new ();
   GQueue *queue = g_queue_new ();
 
   GHashTableIter req_iter;
@@ -683,22 +777,16 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   g_hash_table_iter_init (&req_iter, directly_requested);
   while (g_hash_table_iter_next (&req_iter, &req_key, NULL))
     {
-      if (g_hash_table_contains (name_to_pkg, req_key))
-        {
-          g_hash_table_add (reachable, g_strdup ((const char *)req_key));
-          g_queue_push_tail (queue, g_strdup ((const char *)req_key));
-        }
+      if (g_hash_table_contains (resolved_names, req_key))
+        mark_reachable (reachable, queue, req_key);
     }
-  /* Upgrades of installed packages are needed for the transaction even when
+  /* Upgrades and downgrades of installed packages are needed for the transaction even when
    * no new package requires them (e.g. conflicts). */
   for (guint i = 0; upgrades && i < upgrades->len; ++i)
     {
       const char *name = dnf_package_get_name (g_ptr_array_index (upgrades, i));
-      if (name && !g_hash_table_contains (excluded_pkgs, name) && !g_hash_table_contains (reachable, name))
-        {
-          g_hash_table_add (reachable, g_strdup (name));
-          g_queue_push_tail (queue, g_strdup (name));
-        }
+      if (name && !g_hash_table_contains (excluded_pkgs, name))
+        mark_reachable (reachable, queue, name);
     }
   /* Packages the installed set requires, e.g. glibc's
    * "(glibc-gconv-extra if redhat-rpm-config)" once the transaction brings
@@ -706,23 +794,24 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
    * skipped; their replacements are roots above or gone. */
   if (use_rpmdb)
     {
-      g_autoptr(GHashTable) gone = g_hash_table_new (g_str_hash, g_str_equal);
+      g_autoptr(GHashTable) gone_names = string_set_new ();
+      g_autoptr(GHashTable) gone_nevras = string_set_new ();
       for (guint i = 0; upgrades && i < upgrades->len; ++i)
-        g_hash_table_add (gone, (gpointer)dnf_package_get_name (g_ptr_array_index (upgrades, i)));
+        g_hash_table_add (gone_names, g_strdup (dnf_package_get_name (g_ptr_array_index (upgrades, i))));
       for (guint i = 0; i < removed->len; ++i)
-        g_hash_table_add (gone, (gpointer)dnf_package_get_nevra (g_ptr_array_index (removed, i)));
+        g_hash_table_add (gone_nevras, g_strdup (dnf_package_get_nevra (g_ptr_array_index (removed, i))));
 
       hy_autoquery HyQuery installed_query = hy_query_create (sack);
       hy_query_filter (installed_query, HY_PKG_REPONAME, HY_EQ, HY_SYSTEM_REPO_NAME);
       g_autoptr(GPtrArray) installed = hy_query_run (installed_query);
-      g_autoptr(GHashTable) installed_deps = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+      g_autoptr(GHashTable) installed_deps = string_set_new ();
       for (guint i = 0; i < installed->len; ++i)
         {
           DnfPackage *pkg = g_ptr_array_index (installed, i);
-          if (g_hash_table_contains (gone, dnf_package_get_name (pkg)) ||
-              g_hash_table_contains (gone, dnf_package_get_nevra (pkg)))
+          if (g_hash_table_contains (gone_names, dnf_package_get_name (pkg)) ||
+              g_hash_table_contains (gone_nevras, dnf_package_get_nevra (pkg)))
             continue;
-          add_reldep_edges (dep_query, id_to_pkg, dnf_package_get_requires (pkg),
+          add_reldep_edges (dep_query, dnf_package_get_requires (pkg),
                             dnf_package_get_name (pkg), installed_deps, NULL);
         }
       GHashTableIter inst_it;
@@ -730,11 +819,8 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       g_hash_table_iter_init (&inst_it, installed_deps);
       while (g_hash_table_iter_next (&inst_it, &inst_name, NULL))
         {
-          if (!g_hash_table_contains (excluded_pkgs, inst_name) && !g_hash_table_contains (reachable, inst_name))
-            {
-              g_hash_table_add (reachable, g_strdup (inst_name));
-              g_queue_push_tail (queue, g_strdup (inst_name));
-            }
+          if (!g_hash_table_contains (excluded_pkgs, inst_name))
+            mark_reachable (reachable, queue, inst_name);
         }
     }
 
@@ -758,11 +844,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
               if (g_hash_table_contains (excluded_pkgs, dep_name))
                 continue; /* Excluded: trim package and its exclusive dependencies */
 
-              if (!g_hash_table_contains (reachable, dep_name))
-                {
-                  g_hash_table_add (reachable, g_strdup (dep_name));
-                  g_queue_push_tail (queue, g_strdup (dep_name));
-                }
+              mark_reachable (reachable, queue, dep_name);
             }
         }
       g_free (curr);
@@ -776,13 +858,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     json_object_object_add (root, "arch", json_object_new_string (opt_archlist));
 
   /* Top-level requested RPM list */
-  struct json_object *req_arr = json_object_new_array ();
-  GList *req_list = g_hash_table_get_keys (directly_requested);
-  req_list = g_list_sort (req_list, (GCompareFunc)strcmp);
-  for (GList *l = req_list; l; l = l->next)
-    json_object_array_add (req_arr, json_object_new_string ((const char *)l->data));
-  g_list_free (req_list);
-  json_object_object_add (root, "requested", req_arr);
+  json_object_object_add (root, "requested", sorted_set_array (directly_requested, NULL, NULL));
 
   struct json_object *packages_arr = json_object_new_array ();
 
@@ -807,16 +883,15 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
       if (chk_bytes)
         {
-          int chk_len = 32;
+          int chk_len = 32; /* sha256, also for unknown types */
           const char *algo_name = "sha256";
           switch (chk_type)
             {
-            case G_CHECKSUM_SHA256: chk_len = 32; algo_name = "sha256"; break;
             case G_CHECKSUM_SHA512: chk_len = 64; algo_name = "sha512"; break;
             case G_CHECKSUM_SHA384: chk_len = 48; algo_name = "sha384"; break;
             case G_CHECKSUM_SHA1:   chk_len = 20; algo_name = "sha1"; break;
             case G_CHECKSUM_MD5:    chk_len = 16; algo_name = "md5"; break;
-            default: chk_len = 32; algo_name = "sha256"; break;
+            default: break;
             }
 
           gchar *b64 = g_base64_encode (chk_bytes, chk_len);
@@ -834,7 +909,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       GHashTable *raw_nevras = g_hash_table_lookup (pkg_direct_nevras, name);
 
       struct json_object *pkg_obj = json_object_new_object ();
-      json_object_object_add (pkg_obj, "name", json_object_new_string (name ? name : ""));
+      json_object_object_add (pkg_obj, "name", json_object_new_string (name));
       json_object_object_add (pkg_obj, "version", json_object_new_string (version ? version : ""));
       json_object_object_add (pkg_obj, "arch", json_object_new_string (arch ? arch : ""));
       json_object_object_add (pkg_obj, "nevra", json_object_new_string (nevra ? nevra : ""));
@@ -851,34 +926,17 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
         json_object_object_add (pkg_obj, "replaces", sorted_nevra_array (replaced));
 
       /* Direct dependencies */
-      struct json_object *deps_arr = json_object_new_array ();
-      struct json_object *deps_nevra_arr = json_object_new_array ();
+      json_object_object_add (pkg_obj, "dependencies", sorted_set_array (raw_deps, reachable, NULL));
 
-      if (raw_deps)
-        {
-          GList *dk = g_hash_table_get_keys (raw_deps);
-          dk = g_list_sort (dk, (GCompareFunc)strcmp);
-          for (GList *l = dk; l; l = l->next)
-            {
-              if (g_hash_table_contains (reachable, l->data))
-                json_object_array_add (deps_arr, json_object_new_string ((const char *)l->data));
-            }
-          g_list_free (dk);
-        }
-      json_object_object_add (pkg_obj, "dependencies", deps_arr);
+      /* Weak edges (Recommends, reverse Supplements) to kept packages, so the
+       * exported graph reaches everything the solver installed. */
+      json_object_object_add (pkg_obj, "weak_dependencies",
+                              sorted_set_array (g_hash_table_lookup (pkg_weak_deps, name), reachable, name));
 
-      if (raw_nevras)
-        {
-          GList *nk = g_hash_table_get_keys (raw_nevras);
-          nk = g_list_sort (nk, (GCompareFunc)strcmp);
-          for (GList *l = nk; l; l = l->next)
-            json_object_array_add (deps_nevra_arr, json_object_new_string ((const char *)l->data));
-          g_list_free (nk);
-        }
-      json_object_object_add (pkg_obj, "dependencies_nevra", deps_nevra_arr);
+      json_object_object_add (pkg_obj, "dependencies_nevra", sorted_set_array (raw_nevras, NULL, NULL));
 
       /* Compute flat transitive dependencies */
-      g_autoptr(GHashTable) trans_set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+      g_autoptr(GHashTable) trans_set = string_set_new ();
       GQueue *tq = g_queue_new ();
       g_queue_push_tail (tq, g_strdup (name));
 
@@ -907,13 +965,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
         }
       g_queue_free (tq);
 
-      struct json_object *trans_arr = json_object_new_array ();
-      GList *tk_list = g_hash_table_get_keys (trans_set);
-      tk_list = g_list_sort (tk_list, (GCompareFunc)strcmp);
-      for (GList *l = tk_list; l; l = l->next)
-        json_object_array_add (trans_arr, json_object_new_string ((const char *)l->data));
-      g_list_free (tk_list);
-      json_object_object_add (pkg_obj, "transitive_dependencies", trans_arr);
+      json_object_object_add (pkg_obj, "transitive_dependencies", sorted_set_array (trans_set, NULL, NULL));
 
       json_object_array_add (packages_arr, pkg_obj);
     }

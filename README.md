@@ -43,25 +43,28 @@ bazel run //:microdnf -- lock -o lockfile.json --setopt=reposdir=/path/to/repos.
 By default the installed set is empty and the lock lists the whole closure. Pass `--installroot=<dir>` holding
 a parent image's rpmdb (`var/lib/rpm/rpmdb.sqlite` or `usr/lib/sysimage/rpm`) to resolve like `dnf install` in a
 Dockerfile `RUN` on that image:
-- The lock lists only the transaction: new installs and upgrades. Packages already satisfied by the image are left out.
-- An upgraded package carries `"replaces": [<installed nevra>…]`; packages the transaction erases or obsoletes are
+- The lock lists only the transaction: new installs, upgrades and downgrades. Packages already satisfied by the image are left out.
+  A request for an explicit older version than the installed one (`foo-1.0-1.noarch` on an installed `foo-2.0-1`) is a downgrade,
+  as in dnf; a name-only request, or the installed NEVRA itself, is a no-op. Reinstalls are never produced.
+- An upgraded or downgraded package carries `"replaces": [<installed nevra>…]`; packages the transaction erases or obsoletes are
   listed in a top-level `"removed"` array. Both keys appear only when non-empty.
 - Requirements of the installed packages count, e.g. glibc's `(glibc-gconv-extra if redhat-rpm-config)`.
 - `etc/dnf/modules.d` (enabled module streams) and `PLATFORM_ID` from `etc/os-release` (or `usr/lib/os-release`) are read from the root.
-- The directory must be writable (librpm opens the sqlite rpmdb in WAL mode) and contain `usr/`. A root with no rpmdb
-  behaves like an empty image. `rpm_lock(installroot = ...)` copies the files into a writable scratch dir.
+- The directory must be writable (librpm opens the sqlite rpmdb in WAL mode) and contain `usr/`. A root with `usr/` but no rpmdb
+  behaves like an empty image and prints a warning naming the paths looked for. `rpm_lock(installroot = ...)` copies the files into a writable scratch dir.
 
 #### dnf options
 | Option | Behaviour |
 | --- | --- |
 | `--excludepkgs=<glob,…>` / `--setopt=excludepkgs=…` | dnf `excludepkgs`: matching packages are invisible to the solver (a cut-off like `ca-certificates-2026*`). Repo-scoped `--setopt=<repo>.excludepkgs=…` also works. Unlike `--exclude`, which prunes resolved packages out of the lock graph. |
 | `--module-enable=<name:stream>` | Enables a module stream before resolving, like `dnf module enable`. Streams already enabled in the installroot's `modules.d` are honoured. The platform comes from the installroot's `PLATFORM_ID` or `--setopt=module_platform_id=platform:el9`. |
-| `--best` / `--nobest` | Best is the default, as in EL's `dnf.conf`: requested packages must resolve to their newest version or the lock fails. `--nobest` or `--setopt=best=False` allows older candidates. |
+| `--best` / `--nobest` | **Best is the default for the whole transaction**, as in dnf with EL's `best=True`: every requested package must resolve to its newest candidate and dependencies may not be silently held back on an older version. This is a breaking change: a lock that previously resolved to an older dependency can now fail with a dependency problem. To opt out, pass `--nobest` (or `--setopt=best=False`, or `nobest = True` on `rpm_lock`); the solver may then fall back to older candidates. `--nobest` keeps the constraints of the request: `foo-2.0-1.noarch --nobest` never falls back to `foo-1.0`. |
 | `--setopt=install_weak_deps=False` | Weak dependencies (Recommends, Supplements) are installed by default; this skips them. `exclude_from_weak_autodetect` and `exclude_from_weak` are honoured. |
-| `--forcearch=<arch>` | Solver architecture. It defaults to the first non-`noarch` `--archlist` entry, so an x86_64 lock resolves on an arm64 host. `$basearch` in repo files still follows the host, so use explicit-arch URLs. |
+| `--forcearch=<arch>` | Solver architecture. It defaults to the first non-`noarch`/`src` `--archlist` entry, so an x86_64 lock resolves on an arm64 host. The same architecture feeds `$basearch` in repo URLs (`i686` maps to `i386`, `armv7hl` to `armhfp`); an explicit `DNF_VAR_basearch` in the environment is overridden. |
 
 Rich dependencies (`(a if b)`, `(a or b)`) are solved by libsolv and kept in the lock graph. Any other `--setopt=<key>=<value>`
-or `<repo>.<key>=<value>` goes to libdnf; a `--setopt` without `=` is an error.
+or `<repo>.<key>=<value>` goes to libdnf; a `--setopt` without `=` is an error. Boolean values accept
+`1/0/yes/no/true/false/on/off` case-insensitively; anything else is an error.
 
 `rpm_lock` exposes the same knobs as `excludepkgs`, `install_weak_deps`, `installroot`, `module_enable`,
 `module_platform_id`, `nobest` and `setopt` attributes.
