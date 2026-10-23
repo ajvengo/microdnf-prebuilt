@@ -62,6 +62,14 @@ Dockerfile `RUN` on that image:
 | `--setopt=install_weak_deps=False` | Weak dependencies (Recommends, Supplements) are installed by default; this skips them. `exclude_from_weak_autodetect` and `exclude_from_weak` are honoured. |
 | `--forcearch=<arch>` | Solver architecture. It defaults to the first non-`noarch`/`src` `--archlist` entry, so an x86_64 lock resolves on an arm64 host. The same architecture feeds `$basearch` in repo URLs (`i686` maps to `i386`, `armv7hl` to `armhfp`); an explicit `DNF_VAR_basearch` in the environment is overridden. |
 
+Each package in the lock carries `dependencies` (hard Requires), `weak_dependencies` (Recommends and reverse Supplements the
+solver kept) and `transitive_dependencies` (hard only). `rpm_repository` wires both `dependencies` and `weak_dependencies`
+into `rpm_package.deps`, so `@repo//:<requested>` brings its weak deps. Packages that only the installed set pulls (for
+example a conditional Requires of an installed package) or upgrades nobody requires are reachable through
+`@repo//:transaction`, which aggregates every package in the lock (a requested package may not be named `transaction`). A
+request already satisfied by the installroot stays in `requested` with no package; its target is an empty `rpm_package_group`,
+and `rpm_archive` over it writes a valid empty archive.
+
 Rich dependencies (`(a if b)`, `(a or b)`) are solved by libsolv and kept in the lock graph. Any other `--setopt=<key>=<value>`
 or `<repo>.<key>=<value>` goes to libdnf; a `--setopt` without `=` is an error. Boolean values accept
 `1/0/yes/no/true/false/on/off` case-insensitively; anything else is an error.
