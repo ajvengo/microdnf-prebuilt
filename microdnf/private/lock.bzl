@@ -2,6 +2,41 @@
 
 load("//microdnf/private:providers.bzl", "RpmLockFileInfo")
 
+def _common_dir(files, short):
+    """Longest common parent directory of `files` (the directory itself for a tree artifact)."""
+    if not files:
+        return ""
+    paths = [f.short_path if short else f.path for f in files]
+    if len(files) == 1:
+        return paths[0] if files[0].is_directory else paths[0].rpartition("/")[0]
+    common = paths[0].split("/")[:-1]
+    for p in paths[1:]:
+        parts = p.split("/")[:-1]
+        n = 0
+        for a, b in zip(common, parts):
+            if a != b:
+                break
+            n += 1
+        common = common[:n]
+    return "/".join(common)
+
+def _solver_args(ctx):
+    """dnf_lock flags shaping the solve (dnf semantics), shared by build and run."""
+    args = []
+    for pattern in ctx.attr.excludepkgs:
+        args.append("--excludepkgs=" + pattern)
+    for spec in ctx.attr.module_enable:
+        args.append("--module-enable=" + spec)
+    if ctx.attr.module_platform_id:
+        args.append("--setopt=module_platform_id=" + ctx.attr.module_platform_id)
+    if ctx.attr.nobest:
+        args.append("--nobest")
+    if not ctx.attr.install_weak_deps:
+        args.append("--setopt=install_weak_deps=False")
+    for opt in ctx.attr.setopt:
+        args.append("--setopt=" + opt)
+    return args
+
 def _rpm_lock_impl(ctx):
     out = ctx.outputs.out
     if not out:
@@ -24,6 +59,10 @@ def _rpm_lock_impl(ctx):
     if not repo_rel_dir and repo_files:
         repo_rel_dir = repo_files[0].dirname
 
+    installroot_files = ctx.files.installroot
+    installroot_dir = _common_dir(installroot_files, short = False)
+    installroot_short = _common_dir(installroot_files, short = True)
+
     # Script for hermetic bazel build
     build_content = """#!/usr/bin/env bash
 set -euo pipefail
@@ -43,11 +82,20 @@ fi
 CACHE_DIR="${TMP_DIR}/cache"
 mkdir -p "${CACHE_DIR}"
 
+INSTALLROOT_ARGS=()
+if [ -n "%s" ]; then
+  # Writable copy: librpm opens the sqlite rpmdb in WAL mode.
+  cp -RL "%s" "${TMP_DIR}/installroot"
+  chmod -R u+w "${TMP_DIR}/installroot"
+  INSTALLROOT_ARGS+=(--installroot="${TMP_DIR}/installroot")
+fi
+
 "%s" \\
   --reposdir="${REPOS_DIR}" \\
   --setopt=cachedir="${CACHE_DIR}" \\
+  ${INSTALLROOT_ARGS[@]+"${INSTALLROOT_ARGS[@]}"} \\
   "$@"
-""" % (repo_conf.path, repo_rel_dir, repo_conf.path, repo_conf.path, lock_tool.path)
+""" % (repo_conf.path, repo_rel_dir, repo_conf.path, repo_conf.path, installroot_dir, installroot_dir, lock_tool.path)
 
     ctx.actions.write(
         output = build_script,
@@ -65,11 +113,14 @@ mkdir -p "${CACHE_DIR}"
     for exc in ctx.attr.exclude:
         args.add("--exclude=" + exc)
 
+    solver_args = _solver_args(ctx)
+    args.add_all(solver_args)
+
     for pkg in ctx.attr.packages:
         args.add(pkg)
 
     inputs = depset(
-        direct = [repo_conf] + repo_files,
+        direct = [repo_conf] + repo_files + installroot_files,
         transitive = [],
     )
 
@@ -110,12 +161,21 @@ fi
 CACHE_DIR="${TMP_DIR}/cache"
 mkdir -p "${CACHE_DIR}"
 
+INSTALLROOT_ARGS=()
+if [ -n "%s" ]; then
+  cp -RL "%s" "${TMP_DIR}/installroot"
+  chmod -R u+w "${TMP_DIR}/installroot"
+  INSTALLROOT_ARGS+=(--installroot="${TMP_DIR}/installroot")
+fi
+
 "%s" \\
   --reposdir="${REPOS_DIR}" \\
   --setopt=cachedir="${CACHE_DIR}" \\
+  ${INSTALLROOT_ARGS[@]+"${INSTALLROOT_ARGS[@]}"} \\
   --output="${TMP_OUT}" \\
   --archlist="%s" \\
   --releasever="%s" \\
+  %s \\
   %s \\
   %s
 
@@ -127,10 +187,13 @@ echo "Lockfile updated at: ${DEST}"
         out_dest,
         repo_conf.short_path,
         repo_rel_dir,
+        installroot_short,
+        installroot_short,
         lock_tool.short_path,
         arch_str,
         ctx.attr.releasever,
         " ".join(["--exclude='%s'" % e for e in ctx.attr.exclude]),
+        " ".join(["'%s'" % a for a in solver_args]),
         " ".join(["'%s'" % p for p in ctx.attr.packages]),
     )
 
@@ -140,7 +203,7 @@ echo "Lockfile updated at: ${DEST}"
         is_executable = True,
     )
 
-    runfiles = ctx.runfiles(files = [repo_conf, lock_tool] + repo_files)
+    runfiles = ctx.runfiles(files = [repo_conf, lock_tool] + repo_files + installroot_files)
 
     return [
         DefaultInfo(
@@ -168,6 +231,30 @@ rpm_lock = rule(
             default = [],
             doc = "Optional packages to exclude and prune from the dependency tree.",
         ),
+        "excludepkgs": attr.string_list(
+            default = [],
+            doc = "NEVRA globs hidden from the solver, like dnf excludepkgs= (e.g. release cut-offs).",
+        ),
+        "install_weak_deps": attr.bool(
+            default = True,
+            doc = "Install weak dependencies (Recommends/Supplements), like dnf install_weak_deps.",
+        ),
+        "installroot": attr.label(
+            allow_files = True,
+            doc = "Parent image root (a directory or its files) whose rpmdb and modules.d the " +
+                  "lock resolves on top of, like dnf --installroot. Only the transaction is locked.",
+        ),
+        "module_enable": attr.string_list(
+            default = [],
+            doc = "Module streams to enable before resolving (NAME:STREAM), like dnf module enable.",
+        ),
+        "module_platform_id": attr.string(
+            doc = "Platform module (e.g. 'platform:el9') when no installroot provides os-release.",
+        ),
+        "nobest": attr.bool(
+            default = False,
+            doc = "Allow older candidates when the newest requested package is not installable.",
+        ),
         "lock_tool": attr.label(
             default = Label("//:dnf_lock"),
             executable = True,
@@ -191,6 +278,10 @@ rpm_lock = rule(
             mandatory = True,
             allow_single_file = [".repo", ".conf"],
             doc = "Mandatory repository configuration file.",
+        ),
+        "setopt": attr.string_list(
+            default = [],
+            doc = "Extra dnf configuration overrides passed as --setopt=KEY=VALUE.",
         ),
         "repo_files": attr.label_list(
             allow_files = True,
