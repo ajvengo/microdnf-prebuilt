@@ -102,6 +102,108 @@ sh_test(
     ],
 )
 
+# installroot derived from anchors, whatever the shape of the input files
+rpm_lock(
+    name = "test_installroot_shape_rpmdb_only_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    installroot = "//e2e/testdata:installroot_rpmdb_only",
+    out = "test_installroot_shape_rpmdb_only_lock.lock.json",
+    packages = ["app"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "test_installroot_shape_files_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    installroot = "//e2e/testdata:installroot_files",
+    out = "test_installroot_shape_files_lock.lock.json",
+    packages = ["app"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "test_installroot_shape_sysimage_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    # Matches nothing; the apostrophe exercises shell quoting in the run script.
+    excludepkgs = ["no-such'pkg-*"],
+    installroot = "//e2e/testdata:sysimage_root",
+    out = "test_installroot_shape_sysimage_lock.lock.json",
+    packages = ["app"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "test_installroot_shape_mixed_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    installroot = "//e2e/testdata:mixed_root",
+    out = "test_installroot_shape_mixed_lock.lock.json",
+    packages = ["app"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+sh_test(
+    name = "rpm_lock_installroot_shapes_test",
+    srcs = ["test_lock_installroot_shapes.sh"],
+    args = [
+        "$(location :test_installroot_shape_rpmdb_only_lock.lock.json)",
+        "$(location :test_installroot_shape_files_lock.lock.json)",
+        "$(location :test_installroot_shape_sysimage_lock.lock.json)",
+        "$(location :test_installroot_shape_mixed_lock.lock.json)",
+    ],
+    data = [
+        ":test_installroot_shape_rpmdb_only_lock.lock.json",
+        ":test_installroot_shape_files_lock.lock.json",
+        ":test_installroot_shape_sysimage_lock.lock.json",
+        ":test_installroot_shape_mixed_lock.lock.json",
+    ],
+)
+
+# `bazel run` scripts of rpm_lock: same lockfile as the build action, from runfiles
+sh_test(
+    name = "rpm_lock_run_test",
+    srcs = ["test_lock_run.sh"],
+    args = [
+        "test_generated_lock",
+        "$(location :test_generated_lock.lock.json)",
+        "test_installroot_lock",
+        "$(location :test_installroot_lock.lock.json)",
+        "test_installroot_shape_mixed_lock",
+        "$(location :test_installroot_shape_mixed_lock.lock.json)",
+        "test_installroot_shape_sysimage_lock",
+        "$(location :test_installroot_shape_sysimage_lock.lock.json)",
+    ],
+    data = [
+        ":test_generated_lock",
+        ":test_generated_lock.lock.json",
+        ":test_installroot_lock",
+        ":test_installroot_lock.lock.json",
+        ":test_installroot_shape_mixed_lock",
+        ":test_installroot_shape_mixed_lock.lock.json",
+        ":test_installroot_shape_sysimage_lock",
+        ":test_installroot_shape_sysimage_lock.lock.json",
+    ],
+)
+
 # Step 3 test: RPM proxy repository test
 sh_test(
     name = "test_rpm_repository_test",
