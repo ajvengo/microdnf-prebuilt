@@ -25,4 +25,8 @@ gchar *lock_goal_describe_problems (HyGoal goal);
  * container, without reloading module state from disk. */
 gboolean lock_recompute_modular_filtering (DnfContext *ctx, GError **error);
 
+/* Whether @spec (a NEVRA-like package spec) names a version or release, as in
+ * `foo-1.0` or `foo-1.0-1.noarch`, rather than just a name or provide. */
+gboolean lock_spec_pins_version (DnfSack *sack, const gchar *spec);
+
 G_END_DECLS

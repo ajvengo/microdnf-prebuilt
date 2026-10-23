@@ -18,7 +18,7 @@ if [ -n "${REPOSDIR:-}" ]; then
   repos_args=(-v "${REPOSDIR}:/repos:ro" -e DNF_REPOSDIR=/repos)
 fi
 
-docker run --rm --platform linux/amd64 "${repos_args[@]}" -v "${OUT}:/out" "${IMAGE}" bash -euo pipefail -c '
+docker run --rm --platform linux/amd64 ${repos_args[@]+"${repos_args[@]}"} -v "${OUT}:/out" "${IMAGE}" bash -euo pipefail -c '
 dnf_args=(-y -q)
 if [ -n "${DNF_REPOSDIR:-}" ]; then dnf_args+=(--setopt=reposdir="${DNF_REPOSDIR}"); fi
 dnf "${dnf_args[@]}" install rpm-build >/dev/null
@@ -44,6 +44,7 @@ mkspec libfoo 1.0
 mkspec oldtool 1.0 "Recommends: optional-x"
 mkspec rich-cond 1.0
 mkspec condhost 1.0 "Requires: (cond-extra if cond-trigger)"
+mkspec dgtool 2.0
 
 root=/tmp/root
 mkdir -p "${root}"

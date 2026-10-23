@@ -36,6 +36,22 @@ lock_goal_exclude_from_weak (HyGoal goal, DnfSack *sack, gboolean autodetect,
     goal->exclude_from_weak_autodetect ();
 }
 
+gboolean
+lock_spec_pins_version (DnfSack *sack, const gchar *spec)
+{
+  try
+    {
+      libdnf::Query query (sack);
+      auto ret = query.filterSubject (spec, nullptr, false, true, true, true);
+      const auto &nevra = ret.second;
+      return nevra && (!nevra->getVersion ().empty () || !nevra->getRelease ().empty ());
+    }
+  catch (const std::exception &)
+    {
+      return FALSE;
+    }
+}
+
 gchar *
 lock_goal_describe_problems (HyGoal goal)
 {
