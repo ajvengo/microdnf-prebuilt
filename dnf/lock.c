@@ -82,24 +82,41 @@ filter_archlist (HyQuery query, const gchar *archlist)
   hy_query_filter_in (query, HY_PKG_ARCH, HY_EQ, (const char **)archs);
 }
 
+/* Packages, installed or available, that @spec names (NEVRA forms, globs, provides). */
+static HyQuery
+spec_solution_query (DnfSack *sack, const gchar *spec)
+{
+  g_auto(HySubject) subject = hy_subject_create (spec);
+  HyNevra out_nevra = NULL;
+  HyQuery query = hy_subject_get_best_solution (subject, sack, NULL, &out_nevra,
+                                                FALSE, TRUE, TRUE, TRUE, FALSE);
+  if (out_nevra)
+    hy_nevra_free (out_nevra);
+  return query;
+}
+
 /* Query for one package spec, like `dnf install <spec>`: system packages are
  * left out; with @latest only the newest candidate per arch survives. The
  * @opt_archlist restriction, if any, is applied last. */
 static HyQuery
 get_spec_query (DnfSack *sack, const gchar *spec, gboolean latest, const gchar *opt_archlist)
 {
-  g_auto(HySubject) subject = hy_subject_create (spec);
-  HyNevra out_nevra = NULL;
-  HyQuery key_query = hy_subject_get_best_solution (subject, sack, NULL, &out_nevra,
-                                                    FALSE, TRUE, TRUE, TRUE, FALSE);
-  if (out_nevra)
-    hy_nevra_free (out_nevra);
+  HyQuery key_query = spec_solution_query (sack, spec);
   hy_query_filter (key_query, HY_PKG_REPONAME, HY_NEQ, HY_SYSTEM_REPO_NAME);
   if (latest)
     hy_query_filter_num (key_query, HY_PKG_LATEST_PER_ARCH_BY_PRIORITY, HY_EQ, 1);
   if (opt_archlist)
     filter_archlist (key_query, opt_archlist);
   return key_query;
+}
+
+/* TRUE when @spec names an installed package (`dnf install` reports it as already installed). */
+static gboolean
+spec_is_installed (DnfSack *sack, const gchar *spec)
+{
+  hy_autoquery HyQuery query = spec_solution_query (sack, spec);
+  hy_query_filter (query, HY_PKG_REPONAME, HY_EQ, HY_SYSTEM_REPO_NAME);
+  return !hy_query_is_empty (query);
 }
 
 static HyQuery
@@ -572,13 +589,6 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   hy_autoquery HyQuery query = get_packages_query (ctx, opt_packages, opt_archlist);
   g_autoptr(GPtrArray) target_pkgs = hy_query_run (query);
 
-  if (target_pkgs->len == 0)
-    {
-      g_set_error_literal (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
-                           "No packages matched the specified criteria");
-      return FALSE;
-    }
-
   /* Resolve dependency closure. By default each request is pinned to its
    * newest candidate. --nobest lets the solver pick any version of the
    * requested name/arch, preferring the newest. On top of an install root,
@@ -589,6 +599,15 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       hy_autoquery HyQuery latest_query = get_spec_query (sack, *spec, TRUE, opt_archlist);
       g_autoptr(GPtrArray) spec_pkgs = hy_query_run (latest_query);
       const gboolean pinned = lock_spec_pins_version (sack, *spec);
+
+      /* Like `dnf install`, a request with no candidate is an error, not a silent no-op. */
+      if (spec_pkgs->len == 0 && !(use_rpmdb && spec_is_installed (sack, *spec)))
+        {
+          g_set_error (error, DNF_ERROR, DNF_ERROR_PACKAGE_NOT_FOUND,
+                       "No match for argument: %s", *spec);
+          hy_goal_free (goal);
+          return FALSE;
+        }
 
       g_autoptr(GPtrArray) wanted = g_ptr_array_new ();
       for (guint i = 0; i < spec_pkgs->len; ++i)

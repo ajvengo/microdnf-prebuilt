@@ -114,6 +114,12 @@ section_installroot() {
   expect_json "requested lists the requested name" 'd["requested"] == ["app"]'
   expect_lock "already installed request is a no-op" "" oldtool --installroot="$(fresh_installroot)"
   expect_json "no-op lock still lists the request" 'd["requested"] == ["oldtool"] and d["packages"] == []'
+  expect_lock "an installed package absent from the repos is a no-op" "" condhost --installroot="$(fresh_installroot)"
+  expect_error "a request with no candidate fails like dnf install" "No match for argument: nosuchpkg" \
+    app nosuchpkg --installroot="$(fresh_installroot)"
+  expect_error "an installed-only package needs the installroot" "No match for argument: condhost" condhost
+  expect_error "--nobest does not drop a request with no candidate" "No match for argument: nosuchpkg" \
+    app nosuchpkg --nobest
   expect_lock "relative installroot path" \
     "app-1.0-1.noarch libfoo-2.0-1.noarch" app \
     --installroot="$(python3 -c 'import os,sys; print(os.path.relpath(sys.argv[1]))' "$(fresh_installroot)")"
@@ -218,7 +224,7 @@ section_excludepkgs() {
     expat --excludepkgs=expat-2.7.3-1.el10_2.7,nothing-matches
   expect_lock "--excludepkgs repeated, matching flag first" "expat-2.7.2-1.el10.x86_64" \
     expat --excludepkgs=expat-2.7.3-1.el10_2.7 --excludepkgs=nothing-matches
-  expect_error "excluding every candidate leaves nothing to lock" "No packages matched" \
+  expect_error "excluding every candidate leaves nothing to lock" "No match for argument: expat" \
     expat --excludepkgs='expat-*'
 }
 
