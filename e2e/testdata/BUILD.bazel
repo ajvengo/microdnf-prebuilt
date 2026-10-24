@@ -8,7 +8,6 @@ exports_files([
     "changed_integrity.lock.json",
     "generate_repodata.py",
     "test.repo",
-    "transaction.lock.json",
     "x86_64.lock.json",
 ])
 

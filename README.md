@@ -39,11 +39,6 @@ bazel run //:dnf_lock -- -o lockfile.json --setopt=reposdir=/path/to/repos.d ed 
 bazel run //:microdnf -- lock -o lockfile.json --setopt=reposdir=/path/to/repos.d ed bash
 ```
 
-`rpm_repository` wires each package's `dependencies` (and `weak_dependencies`, when a lock carries them) into
-`rpm_package.deps`. `@repo//:transaction` aggregates every package in the lock (a requested package may not be named
-`transaction`). A request already satisfied by a lockfile below stays in `requested` with no package; its target is an
-empty `rpm_package_group`, and `rpm_archive` over it writes a valid empty archive.
-
 ### 3. Hermetic Host Portability
 - Automatic hermetic fallback configuration when `/usr/lib/rpm/rpmrc` is absent on host systems.
 - Unprivileged user fallback redirecting caches to `~/.cache/microdnf` and repos to a fallback directory when `/etc/yum.repos.d` is missing.
