@@ -404,6 +404,7 @@ run_rpm2archive (int argc, char **argv, GError **error)
 
       g_free (hardlink);
       rpmfiArchiveClose (fi);
+      rpmfiFree (fi);
       rpmfilesFree (files);
       headerFree (h);
       Fclose (gzdi);
