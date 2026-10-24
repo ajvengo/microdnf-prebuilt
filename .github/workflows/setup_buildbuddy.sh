@@ -34,7 +34,7 @@ build:rbe --remote_download_outputs=minimal
 build:rbe --remote_timeout=10m
 build:rbe --platforms=@toolchains_buildbuddy//platforms:linux_x86_64
 build:rbe --extra_execution_platforms=@toolchains_buildbuddy//platforms:linux_x86_64
-build:rbe --jobs 40
+build:rbe --jobs 100
 
 # When remote cluster is available, route ci builds through rbe
 build:ci --config=rbe
