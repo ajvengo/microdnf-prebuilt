@@ -1,6 +1,5 @@
 """Public API for declaring RPM package targets."""
 
-load("//microdnf/private:package.bzl", _rpm_package = "rpm_package", _rpm_package_group = "rpm_package_group")
+load("//microdnf/private:package.bzl", _rpm_package = "rpm_package")
 
 rpm_package = _rpm_package
-rpm_package_group = _rpm_package_group
