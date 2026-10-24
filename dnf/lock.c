@@ -379,6 +379,20 @@ installroot_has_rpmdb (const gchar *root)
   return FALSE;
 }
 
+/* TRUE when @root has an os-release file, where libdnf finds PLATFORM_ID. */
+static gboolean
+installroot_has_os_release (const gchar *root)
+{
+  const gchar *paths[] = { "etc/os-release", "usr/lib/os-release" };
+  for (guint i = 0; i < G_N_ELEMENTS (paths); ++i)
+    {
+      g_autofree gchar *path = g_build_filename (root, paths[i], NULL);
+      if (g_file_test (path, G_FILE_TEST_EXISTS))
+        return TRUE;
+    }
+  return FALSE;
+}
+
 /* Adds edges pkg -> providers of @reqs. @resolved_query is an applied query
  * holding only the resolved packages; each lookup runs on a clone of it, so
  * the provider search never leaves the resolved set (and never scans the sack). */
@@ -566,6 +580,11 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                     "usr/lib/sysimage/rpm/{rpmdb.sqlite,Packages.db,Packages}); "
                     "treating it as an empty image\n", install_root);
     }
+  if (install_root && g_strcmp0 (install_root, "/") != 0 &&
+      !dnf_context_get_platform_module (ctx) && !installroot_has_os_release (install_root))
+    g_printerr ("warning: install root %s has no etc/os-release or usr/lib/os-release, so "
+                "PLATFORM_ID is unknown and module streams may not resolve; set "
+                "--setopt=module_platform_id=platform:<id>\n", install_root);
 
   DnfState *state = dnf_context_get_state (ctx);
   if (!dnf_context_setup_sack_with_flags (ctx, state,

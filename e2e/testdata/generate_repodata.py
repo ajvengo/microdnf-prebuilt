@@ -186,6 +186,8 @@ FEATURE_PACKAGES = [
     ("dgtool", 0, "1.0", "1", "noarch", {}),
     ("dgtool", 0, "2.0", "1", "noarch", {}),
     ("dgapp", 0, "1.0", "1", "noarch", {"requires": ["dgtool"]}),
+    # Like glibc-devel from an older mirror: pins its own build of an installed package.
+    ("dgtool-devel", 0, "1.0", "1", "noarch", {"requires": [("dgtool", "EQ", "1.0")]}),
     # Rich dependencies.
     ("richapp", 0, "1.0", "1", "noarch", {"requires": ["(rich-a if rich-cond)", "(rich-b or rich-c)"]}),
     ("rich-a", 0, "1.0", "1", "noarch", {}),

@@ -103,6 +103,17 @@ expect_stderr() {
   fi
 }
 
+# expect_no_stderr "description" "substring" -- checks the stderr of the last run.
+expect_no_stderr() {
+  if grep -qF -- "$2" "${ERR}"; then
+    echo "FAIL: $1: stderr mentions '$2'"
+    cat "${ERR}"
+    FAILURES=$((FAILURES + 1))
+  else
+    echo "ok: $1"
+  fi
+}
+
 section_installroot() {
   echo "--- installroot (seeded rpmdb: libfoo-1.0, oldtool-1.0, rich-cond-1.0, condhost-1.0, dgtool-2.0)"
   expect_lock "default resolves the full closure" \
@@ -128,6 +139,18 @@ section_installroot() {
     "app-1.0-1.noarch libfoo-2.0-1.noarch oldtool-1.0-1.noarch optional-x-1.0-1.noarch" \
     app --installroot="${WORK}/scratchroot"
   expect_stderr "installroot with usr/ but no rpmdb warns" "has no rpmdb (looked for var/lib/rpm/"
+  local noos
+  noos="$(fresh_installroot)"
+  rm -f "${noos}/usr/lib/os-release"
+  expect_lock "installroot without os-release still resolves" \
+    "app-1.0-1.noarch libfoo-2.0-1.noarch" app --installroot="${noos}"
+  expect_stderr "installroot without os-release warns about PLATFORM_ID" "PLATFORM_ID is unknown"
+  expect_lock "module_platform_id stands in for os-release" \
+    "app-1.0-1.noarch libfoo-2.0-1.noarch" app --installroot="${noos}" --setopt=module_platform_id=platform:el9
+  expect_no_stderr "module_platform_id silences the os-release warning" "PLATFORM_ID is unknown"
+  expect_lock "an installroot with os-release does not warn" \
+    "app-1.0-1.noarch libfoo-2.0-1.noarch" app --installroot="$(fresh_installroot)"
+  expect_no_stderr "an installroot with os-release does not warn" "PLATFORM_ID is unknown"
   expect_lock "conditional Requires of an installed package is kept" \
     "cond-extra-1.0-1.noarch cond-trigger-1.0-1.noarch" cond-trigger --installroot="$(fresh_installroot)"
   expect_lock "no installed package, no conditional Requires" \
@@ -150,6 +173,10 @@ section_downgrades() {
     dgtool-2.0-1.noarch --installroot="$(fresh_installroot)"
   expect_lock "without an installroot the older NEVRA is a plain install" \
     "dgtool-1.0-1.noarch" dgtool-1.0-1.noarch
+  expect_lock "a dependency pinned to an older build downgrades the installed package" \
+    "dgtool-1.0-1.noarch dgtool-devel-1.0-1.noarch" dgtool-devel --installroot="$(fresh_installroot)"
+  expect_json "the dependency downgrade records the installed package it replaces" \
+    '[p.get("replaces") for p in d["packages"] if p["name"] == "dgtool"] == [["dgtool-2.0-1.noarch"]]'
   expect_lock "excludepkgs hiding the newer repo version does not downgrade the installed one" \
     "dgapp-1.0-1.noarch" dgapp --excludepkgs='dgtool-2*' --installroot="$(fresh_installroot)"
 }
