@@ -640,8 +640,37 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
       if (use_best)
         {
+          /* One job per NEVRA, like dnf: a build carried by two repos (a snapshot
+           * and a mirror) would otherwise be two conflicting installs. The
+           * selector lets the solver pick the copy. */
+          g_autoptr(GHashTable) by_nevra = g_hash_table_new_full (g_str_hash, g_str_equal, NULL,
+                                                                  (GDestroyNotify)dnf_packageset_free);
+          g_autoptr(GPtrArray) nevras = g_ptr_array_new ();
           for (guint i = 0; i < wanted->len; ++i)
-            hy_goal_install (goal, g_ptr_array_index (wanted, i));
+            {
+              DnfPackage *pkg = g_ptr_array_index (wanted, i);
+              const gchar *nevra = dnf_package_get_nevra (pkg);
+              DnfPackageSet *copies = g_hash_table_lookup (by_nevra, nevra);
+              if (!copies)
+                {
+                  copies = dnf_packageset_new (sack);
+                  g_hash_table_insert (by_nevra, (gpointer)nevra, copies);
+                  g_ptr_array_add (nevras, (gpointer)nevra);
+                }
+              dnf_packageset_add (copies, pkg);
+            }
+          for (guint i = 0; i < nevras->len; ++i)
+            {
+              HySelector sltr = hy_selector_create (sack);
+              hy_selector_pkg_set (sltr, g_hash_table_lookup (by_nevra, g_ptr_array_index (nevras, i)));
+              gboolean ok = hy_goal_install_selector (goal, sltr, error);
+              hy_selector_free (sltr);
+              if (!ok)
+                {
+                  hy_goal_free (goal);
+                  return FALSE;
+                }
+            }
           continue;
         }
 

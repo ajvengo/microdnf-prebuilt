@@ -22,6 +22,14 @@ enabled=1
 gpgcheck=0
 REPO
 
+# A snapshot and a mirror: two repos with the same builds and the same priority.
+mkdir -p "${WORK}/repos-dup.d"
+for id in snapshot mirror; do
+  printf '[%s]\nname=%s\nbaseurl=file://%s\nenabled=1\ngpgcheck=0\n' "${id}" "${id}" "${REPO_DIR}" \
+    >>"${WORK}/repos-dup.d/dup.repo"
+done
+REPOSDIR="${WORK}/repos.d"
+
 # Writable copy of the parent image root: librpm opens the sqlite rpmdb in WAL mode.
 fresh_installroot() {
   rm -rf "${WORK}/installroot"
@@ -35,7 +43,7 @@ OUT="${WORK}/out.json"
 ERR="${WORK}/err.txt"
 
 run_lock() {
-  "${DNF_LOCK}" --reposdir="${WORK}/repos.d" --setopt=cachedir="${WORK}/cache" \
+  "${DNF_LOCK}" --reposdir="${REPOSDIR}" --setopt=cachedir="${WORK}/cache" \
     --releasever=9 --archlist=x86_64,noarch -o "${OUT}" "$@" 2>"${ERR}"
 }
 
@@ -177,6 +185,14 @@ section_downgrades() {
     "dgtool-1.0-1.noarch dgtool-devel-1.0-1.noarch" dgtool-devel --installroot="$(fresh_installroot)"
   expect_json "the dependency downgrade records the installed package it replaces" \
     '[p.get("replaces") for p in d["packages"] if p["name"] == "dgtool"] == [["dgtool-2.0-1.noarch"]]'
+  REPOSDIR="${WORK}/repos-dup.d"
+  expect_lock "a build in two repos is one install, not two conflicting ones" \
+    "app-1.0-1.noarch libfoo-2.0-1.noarch oldtool-1.0-1.noarch optional-x-1.0-1.noarch" app
+  expect_lock "a build in two repos on an installroot" \
+    "app-1.0-1.noarch libfoo-2.0-1.noarch" app --installroot="$(fresh_installroot)"
+  expect_lock "a pinned older build in two repos still downgrades once" \
+    "dgtool-1.0-1.noarch" dgtool-1.0-1.noarch --installroot="$(fresh_installroot)"
+  REPOSDIR="${WORK}/repos.d"
   expect_lock "excludepkgs hiding the newer repo version does not downgrade the installed one" \
     "dgapp-1.0-1.noarch" dgapp --excludepkgs='dgtool-2*' --installroot="$(fresh_installroot)"
 }
