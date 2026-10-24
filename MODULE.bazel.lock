@@ -388,7 +388,7 @@
     },
     "//microdnf:extensions.bzl%microdnf_prebuilt_extension": {
       "general": {
-        "bzlTransitiveDigest": "1m8KWLRZKH9eD4iJ3ovFnZR04vn4BuPIIALumCHoydY=",
+        "bzlTransitiveDigest": "sD+itUEeU7OnUMtqIlq1uolC8Lo7+iOEx8vkHYTLfJE=",
         "usagesDigest": "nYgae9k7YGOJIWsCDVZVB+ansr24iSVSrz8bRTgt+LQ=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"
