@@ -1,5 +1,0 @@
-[features]
-name=Feature Test Repo
-baseurl=file://@REPO_DIR@
-enabled=1
-gpgcheck=0

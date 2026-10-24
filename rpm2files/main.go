@@ -87,6 +87,9 @@ func openArchive(archivePath string) (io.ReadCloser, error) {
 	if bytes.HasPrefix(magic[:n], []byte{0x28, 0xb5, 0x2f, 0xfd}) {
 		zr, err := zstd.NewReader(f)
 		if err != nil {
+			if zr != nil { // NewReader may return a decoder alongside the error
+				zr.Close()
+			}
 			_ = f.Close()
 			return nil, fmt.Errorf("failed to create zstd reader: %w", err)
 		}

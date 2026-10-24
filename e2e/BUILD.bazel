@@ -50,159 +50,80 @@ sh_test(
     ],
 )
 
-# dnf_lock features: --installroot, excludepkgs, modules, best/nobest, rich and weak deps
-sh_test(
-    name = "lock_features_test",
-    srcs = ["test_lock_features.sh"],
-    args = [
-        "$(location //:dnf_lock)",
-        "$(location //e2e/testdata:features-repo/repodata/repomd.xml)",
-        "$(location //e2e/testdata:installroot/var/lib/rpm/rpmdb.sqlite)",
-    ],
-    data = [
-        "//:dnf_lock",
-        "//e2e/testdata:features-repo/repodata/repomd.xml",
-        "//e2e/testdata:features_repo_files",
-        "//e2e/testdata:installroot/var/lib/rpm/rpmdb.sqlite",
-        "//e2e/testdata:installroot_files",
-    ],
-    # One section per shard (see SECTIONS in the script).
-    shard_count = 8,
-)
-
-# rpm_lock on top of a parent image root, with dnf solver options
+# Incremental lockfile tests
 rpm_lock(
-    name = "test_installroot_lock",
+    name = "layer2_already_installed_lock",
     arch = [
         "x86_64",
         "noarch",
     ],
-    excludepkgs = ["ca-certificates-2026.2.92_v9.0.319-*"],
-    installroot = "//e2e/testdata:installroot_files",
-    module_enable = ["mysql:8.4"],
-    out = "test_installroot_lock.lock.json",
+    lock_files = [":test_generated_lock.lock.json"],
+    out = "layer2_already_installed.lock.json",
+    packages = ["tour"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:test.repo",
+    repo_files = ["//e2e/testdata:test_repo_files"],
+)
+
+rpm_lock(
+    name = "layer2_incremental_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    lock_files = [":test_generated_lock.lock.json"],
+    out = "layer2_incremental.lock.json",
+    packages = ["mystery-devel"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:test.repo",
+    repo_files = ["//e2e/testdata:test_repo_files"],
+)
+
+rpm_lock(
+    name = "layer2_both_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    lock_files = [":test_generated_lock.lock.json"],
+    out = "layer2_both.lock.json",
     packages = [
-        "app",
-        "certuser",
-        "mysql",
-        "oldtool",
-        "weakapp",
+        "mystery-devel",
+        "tour",
     ],
     releasever = "9",
-    repo_config = "//e2e/testdata:features.repo",
-    repo_files = ["//e2e/testdata:features_repo_files"],
+    repo_config = "//e2e/testdata:test.repo",
+    repo_files = ["//e2e/testdata:test_repo_files"],
+)
+
+rpm_lock(
+    name = "changed_integrity_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    lock_files = ["//e2e/testdata:changed_integrity.lock.json"],
+    out = "changed_integrity.lock.json",
+    packages = ["tour"],
+    releasever = "9",
+    repo_config = "//e2e/testdata:test.repo",
+    repo_files = ["//e2e/testdata:test_repo_files"],
 )
 
 sh_test(
-    name = "rpm_lock_installroot_test",
-    srcs = ["test_lock_installroot.sh"],
+    name = "incremental_lock_test",
+    srcs = ["test_incremental_lock.sh"],
     args = [
-        "$(location :test_installroot_lock.lock.json)",
+        "$(location :layer2_already_installed.lock.json)",
+        "$(location :layer2_incremental.lock.json)",
+        "$(location :layer2_both.lock.json)",
+        "$(location :changed_integrity.lock.json)",
     ],
     data = [
-        ":test_installroot_lock.lock.json",
-    ],
-)
-
-# installroot derived from anchors, whatever the shape of the input files
-rpm_lock(
-    name = "test_installroot_shape_rpmdb_only_lock",
-    arch = [
-        "x86_64",
-        "noarch",
-    ],
-    installroot = "//e2e/testdata:installroot_rpmdb_only",
-    out = "test_installroot_shape_rpmdb_only_lock.lock.json",
-    packages = ["app"],
-    releasever = "9",
-    repo_config = "//e2e/testdata:features.repo",
-    repo_files = ["//e2e/testdata:features_repo_files"],
-)
-
-rpm_lock(
-    name = "test_installroot_shape_files_lock",
-    arch = [
-        "x86_64",
-        "noarch",
-    ],
-    installroot = "//e2e/testdata:installroot_files",
-    out = "test_installroot_shape_files_lock.lock.json",
-    packages = ["app"],
-    releasever = "9",
-    repo_config = "//e2e/testdata:features.repo",
-    repo_files = ["//e2e/testdata:features_repo_files"],
-)
-
-rpm_lock(
-    name = "test_installroot_shape_sysimage_lock",
-    arch = [
-        "x86_64",
-        "noarch",
-    ],
-    # Matches nothing; the apostrophe exercises shell quoting in the run script.
-    excludepkgs = ["no-such'pkg-*"],
-    installroot = "//e2e/testdata:sysimage_root",
-    out = "test_installroot_shape_sysimage_lock.lock.json",
-    packages = ["app"],
-    releasever = "9",
-    repo_config = "//e2e/testdata:features.repo",
-    repo_files = ["//e2e/testdata:features_repo_files"],
-)
-
-rpm_lock(
-    name = "test_installroot_shape_mixed_lock",
-    arch = [
-        "x86_64",
-        "noarch",
-    ],
-    installroot = "//e2e/testdata:mixed_root",
-    out = "test_installroot_shape_mixed_lock.lock.json",
-    packages = ["app"],
-    releasever = "9",
-    repo_config = "//e2e/testdata:features.repo",
-    repo_files = ["//e2e/testdata:features_repo_files"],
-)
-
-sh_test(
-    name = "rpm_lock_installroot_shapes_test",
-    srcs = ["test_lock_installroot_shapes.sh"],
-    args = [
-        "$(location :test_installroot_shape_rpmdb_only_lock.lock.json)",
-        "$(location :test_installroot_shape_files_lock.lock.json)",
-        "$(location :test_installroot_shape_sysimage_lock.lock.json)",
-        "$(location :test_installroot_shape_mixed_lock.lock.json)",
-    ],
-    data = [
-        ":test_installroot_shape_rpmdb_only_lock.lock.json",
-        ":test_installroot_shape_files_lock.lock.json",
-        ":test_installroot_shape_sysimage_lock.lock.json",
-        ":test_installroot_shape_mixed_lock.lock.json",
-    ],
-)
-
-# `bazel run` scripts of rpm_lock: same lockfile as the build action, from runfiles
-sh_test(
-    name = "rpm_lock_run_test",
-    srcs = ["test_lock_run.sh"],
-    args = [
-        "test_generated_lock",
-        "$(location :test_generated_lock.lock.json)",
-        "test_installroot_lock",
-        "$(location :test_installroot_lock.lock.json)",
-        "test_installroot_shape_mixed_lock",
-        "$(location :test_installroot_shape_mixed_lock.lock.json)",
-        "test_installroot_shape_sysimage_lock",
-        "$(location :test_installroot_shape_sysimage_lock.lock.json)",
-    ],
-    data = [
-        ":test_generated_lock",
-        ":test_generated_lock.lock.json",
-        ":test_installroot_lock",
-        ":test_installroot_lock.lock.json",
-        ":test_installroot_shape_mixed_lock",
-        ":test_installroot_shape_mixed_lock.lock.json",
-        ":test_installroot_shape_sysimage_lock",
-        ":test_installroot_shape_sysimage_lock.lock.json",
+        ":changed_integrity.lock.json",
+        ":layer2_already_installed.lock.json",
+        ":layer2_both.lock.json",
+        ":layer2_incremental.lock.json",
     ],
 )
 
@@ -424,6 +345,37 @@ bazel_integration_test(
         exclude = ["smoke_test/bazel-*/**"],
     ),
     workspace_path = "e2e/smoke_test",
+)
+
+sh_test(
+    name = "lock_direct_test",
+    srcs = ["test_lock_direct.sh"],
+    args = [
+        "$(rootpath //:dnf_lock)",
+        "$(rootpath //e2e/testdata:test.repo)",
+        "$(rootpath //e2e/testdata:repo/repodata/repomd.xml)",
+        "$(rootpath :test_generated_lock.lock.json)",
+    ],
+    data = [
+        ":test_generated_lock.lock.json",
+        "//:dnf_lock",
+        "//e2e/testdata:repo/repodata/repomd.xml",
+        "//e2e/testdata:test.repo",
+        "//e2e/testdata:test_repo_files",
+    ],
+)
+
+sh_test(
+    name = "lock_layers_test",
+    srcs = ["test_lock_layers.sh"],
+    args = [
+        "$(rootpath :test_lock_layers.py)",
+        "$(rootpath //:dnf_lock)",
+    ],
+    data = [
+        ":test_lock_layers.py",
+        "//:dnf_lock",
+    ],
 )
 
 test_suite(

@@ -63,11 +63,11 @@ COMMON_COPTS = [
     "-Werror=main",
 ]
 
-# C wrappers for libdnf C++-only APIs used by lock.c
+# C wrapper for libdnf C++-only API used by lock.c
 cc_library(
-    name = "lock_goal",
-    srcs = ["lock-goal.cpp"],
-    hdrs = ["lock-goal.h"],
+    name = "lock_repo",
+    srcs = ["lock-repo.cpp"],
+    hdrs = ["lock-repo.h"],
     copts = [
         "-std=c++17",
         "-DLIBDNF_UNSTABLE_API",
@@ -134,7 +134,7 @@ cc_binary(
     includes = ["."],
     linkopts = ["-rdynamic"],
     deps = [
-        ":lock_goal",
+        ":lock_repo",
         "@glib//:gio",
         "@glib//:glib",
         "@glib//:gobject",
@@ -142,6 +142,7 @@ cc_binary(
         "@libarchive//libarchive:archive",
         "@libdnf//:libdnf",
         "@libpeas//:libpeas",
+        "@libsolv//:libsolv",
         "@rpm//:rpm",
         "@rpm//:rpmio",
         "@smartcols//:smartcols",
@@ -216,12 +217,13 @@ cc_binary(
     ],
     includes = ["."],
     deps = [
-        ":lock_goal",
+        ":lock_repo",
         "@glib//:gio",
         "@glib//:glib",
         "@glib//:gobject",
         "@json-c//:json-c",
         "@libdnf//:libdnf",
+        "@libsolv//:libsolv",
         "@rpm//:rpm",
         "@smartcols//:smartcols",
     ],

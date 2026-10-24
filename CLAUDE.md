@@ -4,8 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Read [`agents.md`](agents.md) first: it holds the binding rules (never touch upstream, immutable release tags,
 release tarball contents, `dnf_lock` naming, Bazel invocation-ID protocol, RE2-only Renovate regexes,
-Europe/Amsterdam timestamps). They are not repeated here. User-facing behaviour of `dnf_lock` (`--installroot`,
-`--excludepkgs`, modules, best, weak deps, `--forcearch`) is documented in [`README.md`](README.md).
+Europe/Amsterdam timestamps). They are not repeated here. User-facing behaviour of `dnf_lock` is documented in [`README.md`](README.md).
 
 ## Commands
 
@@ -15,7 +14,7 @@ Every Bazel call goes through a UUID invocation ID (see `agents.md` §4):
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel build --invocation_id=${INVOCATION_ID} //:microdnf //:rpm2archive //:dnf_lock //:rpm2files
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel build --invocation_id=${INVOCATION_ID} //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all  # all 4 platforms
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test --invocation_id=${INVOCATION_ID} //...
-INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test --invocation_id=${INVOCATION_ID} //e2e:lock_features_test   # single test
+INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test --invocation_id=${INVOCATION_ID} //e2e:lock_layers_test   # single test
 ```
 
 - CI runs `bazel build //... <the four *_all targets> --config=ci` and then `bazel test //... --config=ci`.
@@ -54,8 +53,7 @@ Any change to an upstream dependency goes here, never upstream. Bump a module wi
 
 **Public Starlark API (`microdnf/`).** The top-level `*.bzl` files re-export from `microdnf/private/`.
 - `rpm_lock` (`private/lock.bzl`): a build action that runs `dnf_lock` against a `.repo` file (`@REPO_DIR@` is
-  substituted with the repo's path) plus local repodata, and optionally an `installroot` filegroup copied into a
-  writable scratch dir. The target is also `bazel run`-able to refresh a lockfile in place.
+  substituted with the repo's path) plus local repodata, on top of the ordered `lock_files` of the layers below (`--lockfile`). The target is also `bazel run`-able to refresh a lockfile in place.
   `lock_tool` defaults to the source-built `//:dnf_lock`.
 - `rpm` module extension → `rpm_repository`: reads lock JSON files and creates one `http_file`-backed
   `rpm_package` target per package, with arch `select`.
@@ -65,7 +63,5 @@ Any change to an upstream dependency goes here, never upstream. Bump a module wi
   The `tools.prebuilt` tag instead unpacks a local `microdnf_tools.tar.gz` (the `//:tools_archive` genrule).
 
 **Test data (`e2e/testdata/`).**
-- Repodata is generated at build time by `generate_repodata.py`: `test.repo` covers real RPMs, and the `features`
-  scenario is a metadata-only repo with `modules.yaml`.
-- `installroot/var/lib/rpm/rpmdb.sqlite` is a checked-in seeded rpmdb. Regenerate it with `make_installroot_rpmdb.sh`
-  (needs Docker and an EL9 image) whenever the installed-package set the tests expect changes.
+- Repodata for `test.repo` (real RPMs) is generated at build time by `generate_repodata.py`.
+- `test_lock_layers.py` builds small metadata-only repos in a temp dir to test `--lockfile` layering.
