@@ -32,9 +32,6 @@ def _rpm_archive_impl(ctx):
     all_rpms_depset = depset(transitive = rpm_depsets, order = "postorder")
     all_rpms = all_rpms_depset.to_list()
 
-    if not all_rpms:
-        fail("rpm_archive '%s' has no input RPM files from %s" % (ctx.label.name, ctx.attr.rpms))
-
     args = ctx.actions.args()
     args.add("--output", out)
     if compression:
