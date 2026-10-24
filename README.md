@@ -50,6 +50,9 @@ Dockerfile `RUN` on that image:
   listed in a top-level `"removed"` array. Both keys appear only when non-empty.
 - Requirements of the installed packages count, e.g. glibc's `(glibc-gconv-extra if redhat-rpm-config)`.
 - `etc/dnf/modules.d` (enabled module streams) and `PLATFORM_ID` from `etc/os-release` (or `usr/lib/os-release`) are read from the root.
+  A root with neither file and no `--setopt=module_platform_id` prints a warning: module streams may not resolve without a platform.
+- An installed package is downgraded when a request needs an older build of it, e.g. `glibc-devel` from a mirror older than the image
+  pins its own `glibc`; `replaces` names the installed one.
 - The directory must be writable (librpm opens the sqlite rpmdb in WAL mode) and contain `usr/`. A root with `usr/` but no rpmdb
   behaves like an empty image and prints a warning naming the paths looked for. `rpm_lock(installroot = ...)` copies the files into a writable scratch dir.
 
