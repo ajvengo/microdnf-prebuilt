@@ -277,11 +277,19 @@ bazel_integration_test(
     name = "downstream_e2e_tests_bazel_9_3_1",
     timeout = "long",
     bazel_binary = ":bazel_9_3_1",
+    # HOME is not inherited, so test-setup.sh points it at TEST_TMPDIR and the child Bazel
+    # never reads the runner's ~/.bazelrc: setup-bazel writes `startup --output_base` there,
+    # and the child would wait forever on the lock of the Bazel running this test.
+    # (startup_options would not help: only the bazelisk wrapper of bazel_binaries reads
+    # BIT_STARTUP_OPTIONS, and bazel_binary here is the plain pinned binary.)
+    env_inherit = [
+        "CC",
+        "SUDO_ASKPASS",
+    ],
     exec_properties = {
         "dockerNetwork": "bridge",
         "network": "bridge",
     },
-    startup_options = "--nohome_rc --nosystem_rc",
     tags = [
         "requires-network",
     ],
