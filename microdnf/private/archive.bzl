@@ -45,7 +45,7 @@ def _rpm_archive_impl(ctx):
     ctx.actions.run(
         inputs = all_rpms,
         outputs = [out],
-        executable = ctx.executable._rpm2archive_tool,
+        executable = ctx.executable.rpm2archive_tool,
         arguments = [args],
         mnemonic = "Rpm2Archive",
         progress_message = "Creating archive %{output} from RPM targets",
@@ -77,12 +77,12 @@ rpm_archive = rule(
         "out": attr.output(
             doc = "Optional output archive file. Defaults to {name}.tar.gz (or .tar.zst / .tar).",
         ),
-        "_rpm2archive_tool": attr.label(
+        "rpm2archive_tool": attr.label(
             default = Label("//microdnf:rpm2archive"),
             executable = True,
             allow_single_file = True,
             cfg = "exec",
-            doc = "rpm2archive binary tool.",
+            doc = "The rpm2archive binary. Downstream modules that cannot use the default pass @microdnf_tools//:rpm2archive.",
         ),
     },
 )
