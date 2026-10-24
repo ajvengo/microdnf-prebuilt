@@ -17,7 +17,7 @@ INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test --invocation_id=${INVOCATION_ID} //e2e:lock_layers_test   # single test
 ```
 
-- CI runs `bazel build //... <the four *_all targets> --config=ci` and then `bazel test //... --config=ci`.
+- CI runs one `bazel test //... <the four *_all targets> --config=ci`, which builds the non-test targets too.
   `--config=ci` uses the Docker sandbox (`gcr.io/flame-public/rbe-ubuntu24-04`), and `--config=rbe` is BuildBuddy remote execution.
 - Tests are `sh_test`s in `e2e/BUILD.bazel`. Most take their inputs as `$(location …)` args, often a lockfile produced by an `rpm_lock` target in the same package.
 - `//e2e:downstream_e2e_tests` (`rules_bazel_integration_test`) runs a nested Bazel 9.3.1 against `e2e/smoke_test/`.

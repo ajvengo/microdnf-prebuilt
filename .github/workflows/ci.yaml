@@ -3,9 +3,14 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md"]
   pull_request:
     branches: [main]
+    paths-ignore: ["**.md"]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
@@ -17,24 +22,27 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.1
         with:
           bazelisk-cache: true
+          # PRs restore the Bazel binary main saved; only main writes the cache
+          cache-save: ${{ github.event_name != 'pull_request' }}
           disk-cache: false
           repository-cache: false
-          output-base: ""
 
       - name: Configure BuildBuddy Remote Cluster
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         run: .github/workflows/setup_buildbuddy.sh
 
-      - name: Build all targets
-        run: bazel build //... //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all --config=ci
-
-      - name: Test
-        run: bazel test //... --config=ci
+      # One invocation: bazel test also builds the non-test targets it is given, so the
+      # graph is loaded and analysed once and the remote cache is queried once per action.
+      - name: Build and test
+        run: bazel test //... //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all --config=ci
