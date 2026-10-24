@@ -21,11 +21,12 @@ env:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@0.19.1
@@ -60,7 +61,7 @@ jobs:
           .github/workflows/package_release.sh "${TAG}" "${FULL_SHA}" "${SHORT_SHA}" "${BUILD_ID}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.prep.outputs.tag_name }}
           name: microdnf-prebuilt ${{ steps.prep.outputs.tag_name }}
