@@ -224,8 +224,7 @@ sh_test(
 default_test_runner(
     name = "default_test_runner",
     bazel_cmds = [
-        "info",
-        # `test //...` builds every target too; a separate build only adds a pass.
+        # `test //...` builds every target too; a separate build or `info` only adds a pass.
         "test //...",
     ],
 )

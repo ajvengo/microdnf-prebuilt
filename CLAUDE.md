@@ -17,7 +17,7 @@ INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test
 INVOCATION_ID=$(uuidgen) && echo "Invocation ID: ${INVOCATION_ID}" && bazel test --invocation_id=${INVOCATION_ID} //e2e:lock_layers_test   # single test
 ```
 
-- CI runs one `bazel test //... <the four *_all targets> --config=ci`, which builds the non-test targets too.
+- CI runs parallel jobs with `--config=ci`: `bazel test //...` (host graph; builds the non-test targets too) and one `bazel build //:<tool>_<platform>…` per platform.
   `--config=ci` uses the Docker sandbox (`gcr.io/flame-public/rbe-ubuntu24-04`), and `--config=rbe` is BuildBuddy remote execution.
 - Tests are `sh_test`s in `e2e/BUILD.bazel`. Most take their inputs as `$(location …)` args, often a lockfile produced by an `rpm_lock` target in the same package.
 - `//e2e:downstream_e2e_tests` (`rules_bazel_integration_test`) runs a nested Bazel 9.3.1 against `e2e/smoke_test/`.
@@ -41,7 +41,7 @@ The release tarball keeps only `microdnf/`, `microdnf/private/`, the root `BUILD
   (`lock-main.c` → `dnf_lock`, `rpm2archive-main.c` → `rpm2archive`).
 - `lock-goal.cpp` is a thin C wrapper over libdnf's C++-only API (`LIBDNF_UNSTABLE_API`) used by `lock.c`.
 - `rpm2files/` is a Go tool (rules_go; the SDK version comes from `go.mod`).
-- Cross-platform outputs are `platform_transition_binary` targets to `//bazel:<platform>`. Root `BUILD.bazel` aliases them as `//:<tool>[_<platform>|_all]`.
+- Cross-platform outputs are `platform_transition_binary` targets to `//bazel:<platform>`. Root `BUILD.bazel` aliases them as `//:<tool>[_<platform>|_all]`. They are tagged `manual`, so `//...` analyses the host platform only; name them explicitly.
 
 **Local registry (`bazel/3rdparty/`).** It is consulted before BCR and holds source-built C deps: glib, rpm,
 libdnf, libsolv, librepo, libmodulemd, gpgme, … Each is the upstream tarball plus an `overlay/` (BUILD files,

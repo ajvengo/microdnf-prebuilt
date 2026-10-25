@@ -20,9 +20,27 @@ env:
   BUILDBUDDY_ENDPOINT: ${{ vars.BUILDBUDDY_ENDPOINT || 'manuelfrancisconaranjo.buildbuddy.io' }}
 
 jobs:
+  # Analysis, not execution, dominates: every platform drags in its own toolchain and
+  # sysroot graph. Cross targets are `manual`, so `//...` is the host graph only and
+  # each platform is analysed in its own parallel job.
   build:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: test
+            command: test //...
+          - name: linux_amd64
+            command: build //:microdnf_linux_amd64 //:rpm2archive_linux_amd64 //:dnf_lock_linux_amd64 //:rpm2files_linux_amd64
+          - name: linux_arm64
+            command: build //:microdnf_linux_arm64 //:rpm2archive_linux_arm64 //:dnf_lock_linux_arm64 //:rpm2files_linux_arm64
+          - name: osx_amd64
+            command: build //:microdnf_osx_amd64 //:rpm2archive_osx_amd64 //:dnf_lock_osx_amd64 //:rpm2files_osx_amd64
+          - name: osx_arm64
+            command: build //:microdnf_osx_arm64 //:rpm2archive_osx_arm64 //:dnf_lock_osx_arm64 //:rpm2files_osx_arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -42,7 +60,6 @@ jobs:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         run: .github/workflows/setup_buildbuddy.sh
 
-      # One invocation: bazel test also builds the non-test targets it is given, so the
-      # graph is loaded and analysed once and the remote cache is queried once per action.
-      - name: Build and test
-        run: bazel test //... //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all --config=ci
+      # `bazel test` also builds the non-test targets of `//...`.
+      - name: Bazel ${{ matrix.name }}
+        run: bazel ${{ matrix.command }} --config=ci
