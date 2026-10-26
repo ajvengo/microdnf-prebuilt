@@ -163,23 +163,22 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
 # (forcearch, excludepkgs, modules, best/nobest).
-# Each tuple: (name, epoch, version, release, arch, {dependency type: [entries]}).
-# Entries are a bare name, a rich dependency "(...)", or (name, flags, version).
+# Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
-    ("libfoo", 0, "2.0", "1", "noarch", {}),
+    ("libfoo", 0, "2.0", "1", "noarch", []),
     # --excludepkgs: release cut-off globs and full NEVRAs.
-    ("ca-certificates", 0, "2025.2.80_v9.0.305", "1.el9", "noarch", {}),
-    ("ca-certificates", 0, "2026.2.92_v9.0.319", "1.el9", "noarch", {}),
-    ("certuser", 0, "1.0", "1", "noarch", {"requires": ["ca-certificates"]}),
-    ("expat", 0, "2.7.2", "1.el10", "x86_64", {}),
-    ("expat", 0, "2.7.3", "1.el10_2.7", "x86_64", {}),
+    ("ca-certificates", 0, "2025.2.80_v9.0.305", "1.el9", "noarch", []),
+    ("ca-certificates", 0, "2026.2.92_v9.0.319", "1.el9", "noarch", []),
+    ("certuser", 0, "1.0", "1", "noarch", ["ca-certificates"]),
+    ("expat", 0, "2.7.2", "1.el10", "x86_64", []),
+    ("expat", 0, "2.7.3", "1.el10_2.7", "x86_64", []),
     # best / nobest: the newest bestapp is not installable.
-    ("bestapp", 0, "1.0", "1", "noarch", {}),
-    ("bestapp", 0, "2.0", "1", "noarch", {"requires": ["missing-lib"]}),
+    ("bestapp", 0, "1.0", "1", "noarch", []),
+    ("bestapp", 0, "2.0", "1", "noarch", ["missing-lib"]),
     # --module-enable: non-modular mysql 8.0 and the modular mysql:8.4 stream.
-    ("mysql", 0, "8.0.44", "1.el9", "x86_64", {}),
-    ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", {}),
+    ("mysql", 0, "8.0.44", "1.el9", "x86_64", []),
+    ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", []),
 ]
 
 FEATURE_MODULES_YAML = b"""---
@@ -212,35 +211,23 @@ data:
 """
 
 
-def _nevra_file(name, ver, rel, arch):
-    return f"{name}-{ver}-{rel}.{arch}.rpm"
-
-
-def _dep_entries(entries):
-    out = []
-    for entry in entries:
-        if isinstance(entry, tuple):
-            name, flags, ver = entry
-            out.append(f'      <rpm:entry name="{name}" flags="{flags}" epoch="0" ver="{ver}"/>')
-        else:
-            name = entry.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-            out.append(f'      <rpm:entry name="{name}"/>')
-    return out
+def _xml_doc(root, attrs, body):
+    head = '<?xml version="1.0" encoding="UTF-8"?>\n'
+    return (head + f"<{root} {attrs}>\n" + "\n".join(body) + f"\n</{root}>\n").encode()
 
 
 def feature_repodata():
     """Returns (primary, filelists, other) XML for FEATURE_PACKAGES."""
     primary = []
-    filelists = []
-    other = []
-    for name, epoch, ver, rel, arch, deps in FEATURE_PACKAGES:
-        nevra = f"{name}-{epoch}:{ver}-{rel}.{arch}"
-        pkgid = hashlib.sha256(nevra.encode()).hexdigest()
-        lines = [
+    stubs = []  # filelists.xml and other.xml carry the same per-package stub
+    for name, epoch, ver, rel, arch, requires in FEATURE_PACKAGES:
+        pkgid = hashlib.sha256(f"{name}-{epoch}:{ver}-{rel}.{arch}".encode()).hexdigest()
+        version = f'  <version epoch="{epoch}" ver="{ver}" rel="{rel}"/>'
+        primary += [
             '<package type="rpm">',
             f"  <name>{name}</name>",
             f"  <arch>{arch}</arch>",
-            f'  <version epoch="{epoch}" ver="{ver}" rel="{rel}"/>',
+            version,
             f'  <checksum type="sha256" pkgid="YES">{pkgid}</checksum>',
             f"  <summary>{name} test package</summary>",
             f"  <description>{name} test package.</description>",
@@ -248,7 +235,7 @@ def feature_repodata():
             "  <url></url>",
             '  <time file="1404109239" build="1404109194"/>',
             '  <size package="1000" installed="0" archive="0"/>',
-            f'  <location href="features/{_nevra_file(name, ver, rel, arch)}"/>',
+            f'  <location href="features/{name}-{ver}-{rel}.{arch}.rpm"/>',
             "  <format>",
             "    <rpm:license>MIT</rpm:license>",
             "    <rpm:vendor/>",
@@ -260,38 +247,23 @@ def feature_repodata():
             f'      <rpm:entry name="{name}" flags="EQ" epoch="{epoch}" ver="{ver}" rel="{rel}"/>',
             "    </rpm:provides>",
         ]
-        for dep_type in ("requires", "recommends", "supplements"):
-            if deps.get(dep_type):
-                lines.append(f"    <rpm:{dep_type}>")
-                lines.extend(_dep_entries(deps[dep_type]))
-                lines.append(f"    </rpm:{dep_type}>")
-        lines += ["  </format>", "</package>"]
-        primary.extend(lines)
-        version = f'  <version epoch="{epoch}" ver="{ver}" rel="{rel}"/>'
-        filelists += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
-        other += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
+        if requires:
+            primary.append("    <rpm:requires>")
+            primary += [f'      <rpm:entry name="{dep}"/>' for dep in requires]
+            primary.append("    </rpm:requires>")
+        primary += ["  </format>", "</package>"]
+        stubs += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
 
-    count = len(FEATURE_PACKAGES)
-    head = '<?xml version="1.0" encoding="UTF-8"?>\n'
-    primary_xml = (
-        head
-        + f'<metadata xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" packages="{count}">\n'
-        + "\n".join(primary)
-        + "\n</metadata>\n"
+    count = f'packages="{len(FEATURE_PACKAGES)}"'
+    return (
+        _xml_doc(
+            "metadata",
+            f'xmlns="http://linux.duke.edu/metadata/common" xmlns:rpm="http://linux.duke.edu/metadata/rpm" {count}',
+            primary,
+        ),
+        _xml_doc("filelists", f'xmlns="http://linux.duke.edu/metadata/filelists" {count}', stubs),
+        _xml_doc("otherdata", f'xmlns="http://linux.duke.edu/metadata/other" {count}', stubs),
     )
-    filelists_xml = (
-        head
-        + f'<filelists xmlns="http://linux.duke.edu/metadata/filelists" packages="{count}">\n'
-        + "\n".join(filelists)
-        + "\n</filelists>\n"
-    )
-    other_xml = (
-        head
-        + f'<otherdata xmlns="http://linux.duke.edu/metadata/other" packages="{count}">\n'
-        + "\n".join(other)
-        + "\n</otherdata>\n"
-    )
-    return primary_xml.encode(), filelists_xml.encode(), other_xml.encode()
 
 
 def compress(data):

@@ -20,6 +20,7 @@ enabled=1
 gpgcheck=0
 REPO
 REPOSDIR="${WORK}/repos.d"
+ARCHLIST=x86_64,noarch
 
 FAILURES=0
 OUT="${WORK}/out.json"
@@ -27,11 +28,16 @@ ERR="${WORK}/err.txt"
 
 run_lock() {
   "${DNF_LOCK}" --reposdir="${REPOSDIR}" --setopt=cachedir="${WORK}/cache" \
-    --releasever=9 --archlist=x86_64,noarch -o "${OUT}" "$@" 2>"${ERR}"
+    --releasever=9 --archlist="${ARCHLIST}" -o "${OUT}" "$@" 2>"${ERR}"
 }
 
 nevras() {
   python3 -c 'import json,sys; print(" ".join(sorted(p["nevra"] for p in json.load(open(sys.argv[1]))["packages"])))' "${OUT}"
+}
+
+fail() {
+  echo "FAIL: $1"
+  FAILURES=$((FAILURES + 1))
 }
 
 # expect_lock "description" "expected sorted NEVRAs" dnf_lock-args...
@@ -39,18 +45,16 @@ expect_lock() {
   local desc="$1" expected="$2"
   shift 2
   if ! run_lock "$@"; then
-    echo "FAIL: ${desc}: dnf_lock exited non-zero"
+    fail "${desc}: dnf_lock exited non-zero"
     cat "${ERR}"
-    FAILURES=$((FAILURES + 1))
     return
   fi
   local got
   got="$(nevras)"
   if [ "${got}" != "${expected}" ]; then
-    echo "FAIL: ${desc}"
+    fail "${desc}"
     echo "  expected: ${expected}"
     echo "  got:      ${got}"
-    FAILURES=$((FAILURES + 1))
   else
     echo "ok: ${desc}"
   fi
@@ -61,12 +65,10 @@ expect_error() {
   local desc="$1" needle="$2"
   shift 2
   if run_lock "$@"; then
-    echo "FAIL: ${desc}: dnf_lock succeeded, expected an error"
-    FAILURES=$((FAILURES + 1))
+    fail "${desc}: dnf_lock succeeded, expected an error"
   elif ! grep -qF -- "${needle}" "${ERR}"; then
-    echo "FAIL: ${desc}: error does not mention '${needle}'"
+    fail "${desc}: error does not mention '${needle}'"
     cat "${ERR}"
-    FAILURES=$((FAILURES + 1))
   else
     echo "ok: ${desc}"
   fi
@@ -144,17 +146,8 @@ gpgcheck=0
 REPO
   expect_lock "--forcearch=${OTHER_ARCH} sets \$basearch in the repo URL" \
     "libfoo-2.0-1.noarch" libfoo --reposdir="${WORK}/archrepos.d" --forcearch="${OTHER_ARCH}"
-  run_lock_arch() {
-    "${DNF_LOCK}" --reposdir="${WORK}/archrepos.d" --setopt=cachedir="${WORK}/cache" \
-      --releasever=9 --archlist="${OTHER_ARCH},noarch" -o "${OUT}" "$@" 2>"${ERR}"
-  }
-  if run_lock_arch libfoo && [ "$(nevras)" = "libfoo-2.0-1.noarch" ]; then
-    echo "ok: --archlist=${OTHER_ARCH} sets \$basearch in the repo URL"
-  else
-    echo "FAIL: --archlist=${OTHER_ARCH} sets \$basearch in the repo URL"
-    cat "${ERR}"
-    FAILURES=$((FAILURES + 1))
-  fi
+  REPOSDIR="${WORK}/archrepos.d" ARCHLIST="${OTHER_ARCH},noarch" \
+    expect_lock "--archlist=${OTHER_ARCH} sets \$basearch in the repo URL" "libfoo-2.0-1.noarch" libfoo
   # An x86_64 package must resolve on any host with --forcearch=x86_64.
   expect_lock "--forcearch=x86_64 resolves x86_64 packages on any host" \
     "expat-2.7.3-1.el10_2.7.x86_64" expat --forcearch=x86_64

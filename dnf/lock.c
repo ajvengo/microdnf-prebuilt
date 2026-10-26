@@ -788,20 +788,20 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
               char *spec_array[] = { g_ptr_array_index (actual_target_pkgs, i), NULL };
               hy_autoquery HyQuery all_query = get_packages_query (ctx, spec_array, opt_archlist, FALSE);
               DnfPackageSet *pset = hy_query_run_set (all_query);
+              gboolean ok = TRUE;
               if (dnf_packageset_count (pset) > 0)
                 {
                   HySelector sltr = hy_selector_create (sack);
                   hy_selector_pkg_set (sltr, pset);
-                  gboolean ok = hy_goal_install_selector (goal, sltr, error);
+                  ok = hy_goal_install_selector (goal, sltr, error);
                   hy_selector_free (sltr);
-                  if (!ok)
-                    {
-                      dnf_packageset_free (pset);
-                      hy_goal_free (goal);
-                      return FALSE;
-                    }
                 }
               dnf_packageset_free (pset);
+              if (!ok)
+                {
+                  hy_goal_free (goal);
+                  return FALSE;
+                }
             }
         }
 
