@@ -3,63 +3,76 @@ name: CI
 on:
   push:
     branches: [main]
-    paths-ignore: ["**.md"]
-  pull_request:
-    branches: [main]
-    paths-ignore: ["**.md"]
+    tags: ["*"]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
-
-permissions:
-  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: ${{ github.ref_name != 'main' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 
 env:
   BUILDBUDDY_ENDPOINT: ${{ vars.BUILDBUDDY_ENDPOINT || 'manuelfrancisconaranjo.buildbuddy.io' }}
 
 jobs:
-  # Analysis, not execution, dominates: every platform drags in its own toolchain and
-  # sysroot graph. Cross targets are `manual`, so `//...` is the host graph only and
-  # each platform is analysed in its own parallel job.
+  # Post-merge pushes to main, tags, and manual workflow dispatches: trusted runs with NO approvals
   build:
-    name: ${{ matrix.name }}
+    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: test
-            command: test //...
-          - name: linux_amd64
-            command: build //:microdnf_linux_amd64 //:rpm2archive_linux_amd64 //:dnf_lock_linux_amd64 //:rpm2files_linux_amd64
-          - name: linux_arm64
-            command: build //:microdnf_linux_arm64 //:rpm2archive_linux_arm64 //:dnf_lock_linux_arm64 //:rpm2files_linux_arm64
-          - name: osx_amd64
-            command: build //:microdnf_osx_amd64 //:rpm2archive_osx_amd64 //:dnf_lock_osx_amd64 //:rpm2files_osx_amd64
-          - name: osx_arm64
-            command: build //:microdnf_osx_arm64 //:rpm2archive_osx_arm64 //:dnf_lock_osx_arm64 //:rpm2files_osx_arm64
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
+      - name: Checkout code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Bazel
-        uses: bazel-contrib/setup-bazel@0.19.1
+        uses: bazel-contrib/setup-bazel@9f0750536d239de15c1f8528e2ba6c17a99fb752 # 0.19.1
         with:
           bazelisk-cache: true
-          # PRs restore the Bazel binary main saved; only main writes the cache
-          cache-save: ${{ github.event_name != 'pull_request' }}
           disk-cache: false
           repository-cache: false
+          output-base: ""
 
       - name: Configure BuildBuddy Remote Cluster
         env:
           BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
         run: .github/workflows/setup_buildbuddy.sh
 
-      # `bazel test` also builds the non-test targets of `//...`.
-      - name: Bazel ${{ matrix.name }}
-        run: bazel ${{ matrix.command }} --config=ci
+      - name: Build all targets
+        run: bazel build //... //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all --config=ci
+
+      - name: Test
+        run: bazel test //... --config=ci
+
+  # Pull requests (forks & local PRs): gated behind pr-secrets environment approval
+  integration-tests:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    environment: pr-secrets # Pauses here until a maintainer approves in the UI
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR code in merged state
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/pull/${{ github.event.number }}/merge
+
+      - name: Set up Bazel
+        uses: bazel-contrib/setup-bazel@9f0750536d239de15c1f8528e2ba6c17a99fb752 # 0.19.1
+        with:
+          bazelisk-cache: true
+          disk-cache: false
+          repository-cache: false
+          output-base: ""
+
+      - name: Configure BuildBuddy Remote Cluster
+        env:
+          BUILDBUDDY_API_KEY: ${{ secrets.BUILDBUDDY_API_KEY }}
+        run: .github/workflows/setup_buildbuddy.sh
+
+      - name: Build all targets
+        run: bazel build //... //:microdnf_all //:rpm2archive_all //:dnf_lock_all //:rpm2files_all --config=ci
+
+      - name: Test
+        run: bazel test //... --config=ci
