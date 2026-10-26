@@ -51,8 +51,10 @@ Three lines of `run_lock` (join of the split list, the `[0]` emptiness test) are
 
 | Harness | Bound | `--unwind` |
 |---|---|---|
-| `split` | 0..2 option occurrences (or NULL), each 0..4 arbitrary non-NUL bytes | 14 |
-| `split-alpha` | 0..2 occurrences, each 0..8 bytes over `{a,b,',',' ','\t'}` | 22 |
+| `split-basic` | 0..2 option occurrences (or NULL), each 0..3 arbitrary non-NUL bytes: terminated, non-NULL result; one chosen token non-empty, separator-free, stripped; two chosen tokens differ; no input -> empty list; no leak | 6 |
+| `split-sound` | same inputs: one chosen output token is a stripped run of some input | 6 |
+| `split-complete` | same inputs: one chosen non-empty stripped run of one chosen input is in the output | 6 |
+| `split-trip` | **1** occurrence of 0..3 bytes: `split(join(split(x))) == split(x)` | 6 |
 | `basearch` | arch of 0..7 arbitrary non-NUL bytes | 12 |
 | `solvearch` | argc 1..3; `--archlist`/`--forcearch` values of 0..6 arbitrary bytes | 16 |
 | `usebest` | all boolean/priority combinations (exhaustive) | 8 |
@@ -60,7 +62,13 @@ Three lines of `run_lock` (join of the split list, the `[0]` emptiness test) are
 
 `--unwinding-assertions` passing means no execution longer than the bound exists for these input sizes;
 nothing is claimed for longer strings or more occurrences (loops are over `strlen` and the token
-count, which scale linearly; the alphabet run goes to length 8 to cover separator-heavy shapes).
+count, which scale linearly). The `split` bounds are small: with 4-byte inputs (or 3 bytes with a second
+occurrence in the round trip) the CNF exceeds 6 GiB (see README, "Why the split proofs are small").
+
+"One chosen token / pair / run": `h_split.c` quantifies "for every output token" by picking the index
+nondeterministically (`choose_below`), which CBMC explores exhaustively, so the statement is universal,
+but each job proves it for one witness instead of looping over all tokens. The properties are separate
+jobs (`ONLY=n`) because one job holding all of them does not fit in 6 GiB.
 
 ## Out of scope
 
@@ -77,8 +85,16 @@ cannot overflow for a real process: argc <= ARG_MAX/2), callers violating precon
   MiniSat 1.17 GiB / 16 s, CaDiCaL 2.95 GiB / 46 s; MiniSat kept. Kissat is not installed.
 - Run with 16 parallel jobs (limit raised by the user from 8; sum of caps 96 GiB < 200 GiB), each under
   `ulimit -v 6 GiB` and `timeout 600`. Measured peaks: see README.
-- `-DMODEL_RELAXED` (setopt, solvearch only): model-created strings get a fixed capacity (`MODEL_STR_CAP`) instead of an
+- `-DMODEL_RELAXED` (setopt, solvearch and all split jobs): model-created strings get a fixed capacity (`MODEL_STR_CAP`) instead of an
   exact-fit symbolic size, `memcpy` is a byte loop, and `g_strsplit*` is a one-scan implementation bounded by
   `MODEL_MAXTOK`; both bounds are asserted in the model. Consequence: an overrun of a *model-created string* by the
-  shipped code would not be an out-of-bounds in these two harnesses (the shipped code only reads them,
-  NUL-terminated); arrays returned by the splits and `g_new0` blocks stay exact-fit.
+  shipped code would not be an out-of-bounds in these harnesses (the shipped code only reads them,
+  NUL-terminated); arrays returned by the splits and `g_new0` blocks stay exact-fit. For `split_option_values`
+  the list it returns (`g_ptr_array_free (a, FALSE)`) is an exact-fit copy of what was added, so a missing
+  NULL terminator (`n-split-term`) is still an out-of-bounds read. Tokens are `MODEL_STR_CAP` bytes, so an
+  overrun of a token (e.g. a `g_strstrip` that writes past the NUL) would NOT be caught; that function is
+  model code, not shipped code.
+- `GPtrArray` in `glib_model.h`: `pdata` is one fixed buffer of `MODEL_PTR_CAP` (16) slots while the array is
+  built (an add beyond that is an assertion, not silently dropped), because a malloc-copy-free per add made
+  one heap object per element and blew the formula up.
+- `g_strchug` copies with a byte loop instead of `memmove` (a symbolic-size `memmove` is one huge array update).

@@ -10,47 +10,71 @@
 #ifndef L
 #define L 4 /* max length of one input string */
 #endif
-#define NV 2 /* max number of --excludepkgs / --module-enable occurrences */
+#ifdef FIXED /* one fixed-size buffer per input, NUL at a symbolic position */
+#define INPUT_STR(l) nondet_str_fixed ("", 0, l)
+#else
+#define INPUT_STR nondet_str
+#endif
+#ifndef NV
+#define NV 2
+#endif
+/* NV: max number of --excludepkgs / --module-enable occurrences */
 
 static int is_sep (char c) { return c == ',' || c == ' '; }
 
-/* Next run [*s,*e) of non-separator characters of v after position *pos, stripped. */
-static int strip_run (const char *v, size_t a, size_t b, char *buf)
+/* Does the stripped run v[a,b) equal the string t? Compared in place (no copy of the run). */
+static int run_eq (const char *v, size_t a, size_t b, const char *t)
 {
   while (a < b && model_isspace (v[a])) a++;
   while (b > a && model_isspace (v[b - 1])) b--;
-  for (size_t i = a; i < b; i++) buf[i - a] = v[i];
-  buf[b - a] = '\0';
-  return b > a;
+  if (b == a) return 0; /* empty runs are dropped, they equal nothing */
+  size_t i = 0;
+  for (; a + i < b; i++)
+    if (t[i] != v[a + i]) return 0;
+  return t[i] == '\0';
 }
 
-static int in_list (char **list, const char *tok)
+/* Does the stripped run v[a,b) have any content? */
+static int run_nonempty (const char *v, size_t a, size_t b)
 {
-  for (char **p = list; *p; p++)
-    if (strcmp (*p, tok) == 0) return 1;
+  for (; a < b; a++)
+    if (!model_isspace (v[a])) return 1;
   return 0;
 }
 
-/* completeness: every non-empty stripped run of every input is in the output */
-static void check_complete (char **values, char **res)
+#ifndef ONLY
+#define ONLY (-1) /* all properties in one run; run.sh splits them into separate jobs */
+#endif
+#define WANT(n) (ONLY < 0 || ONLY == (n))
+
+#ifdef FLAT_SOUND
+/* Soundness, flat form: tok (no leading/trailing whitespace, non-empty) is a stripped run of some
+ * input iff it occurs at some position whose left context is whitespace (not a separator) back to
+ * a separator / the start, and whose right context is whitespace forward to a separator / the end. */
+static int is_run_of (char **values, const char *tok)
 {
+  size_t m = strlen (tok);
+  if (m == 0 || model_isspace (tok[0]) || model_isspace (tok[m - 1])) return 0;
   for (char **v = values; v && *v; v++)
     {
-      size_t i = 0, start = 0;
-      for (;;)
+      size_t len = strlen (*v);
+      for (size_t a = 0; a + m <= len; a++)
         {
-          while ((*v)[i] && !is_sep ((*v)[i])) i++;
-          char buf[L + 1];
-          if (strip_run (*v, start, i, buf))
-            __CPROVER_assert (in_list (res, buf), "completeness: input token missing from output");
-          if (!(*v)[i]) break;
-          i++;
-          start = i;
+          const char *s = *v;
+          size_t i = 0;
+          while (i < m && s[a + i] == tok[i]) i++;
+          if (i < m) continue;
+          size_t l = a;
+          while (l > 0 && model_isspace (s[l - 1]) && !is_sep (s[l - 1])) l--;
+          size_t r = a + m;
+          while (s[r] && model_isspace (s[r]) && !is_sep (s[r])) r++;
+          if ((l == 0 || is_sep (s[l - 1])) && (s[r] == '\0' || is_sep (s[r]))) return 1;
         }
     }
+  return 0;
 }
-
-/* soundness: every output token is a stripped run of some input */
+#else
+/* Soundness: is the (stripped, non-empty) token tok some stripped run of some input? */
 static int is_run_of (char **values, const char *tok)
 {
   for (char **v = values; v && *v; v++)
@@ -59,14 +83,24 @@ static int is_run_of (char **values, const char *tok)
       for (;;)
         {
           while ((*v)[i] && !is_sep ((*v)[i])) i++;
-          char buf[L + 1];
-          if (strip_run (*v, start, i, buf) && strcmp (buf, tok) == 0) return 1;
+          if (run_eq (*v, start, i, tok)) return 1;
           if (!(*v)[i]) break;
           i++;
           start = i;
         }
     }
   return 0;
+}
+#endif
+
+/* Properties quantified over "every output token" / "every pair" / "every input run" are checked
+ * for ONE nondeterministically chosen token / pair / run: CBMC explores all choices, so this is
+ * the universal statement, at the cost of one instance instead of a loop over all of them. */
+static unsigned choose_below (unsigned n)
+{
+  unsigned k;
+  __CPROVER_assume (k < n);
+  return k;
 }
 
 int main (void)
@@ -78,28 +112,53 @@ int main (void)
   if (nv <= NV)
     {
       values = g_new0 (gchar *, nv + 1);
-      for (unsigned i = 0; i < nv; i++) values[i] = nondet_str (L);
+      for (unsigned i = 0; i < nv; i++) values[i] = INPUT_STR (L);
     }
+  else
+    nv = 0;
 
   GStrv res = split_option_values (values);
 
-  /* terminated, usable result; every entry clean and unique */
+  /* terminated, usable result */
   __CPROVER_assert (res != NULL, "result is non-NULL");
   unsigned n = 0;
-  for (char **p = res; *p; p++, n++)
+  while (res[n]) n++;
+  if (nv == 0) __CPROVER_assert (n == 0, "no input -> empty list");
+
+  if (n > 0 && WANT (0))
     {
-      __CPROVER_assert (**p != '\0', "no empty token");
-      for (char *c = *p; *c; c++) __CPROVER_assert (!is_sep (*c), "no separator inside a token");
-      __CPROVER_assert (!model_isspace ((*p)[0]), "no leading whitespace");
-      __CPROVER_assert (!model_isspace ((*p)[strlen (*p) - 1]), "no trailing whitespace");
-      __CPROVER_assert (is_run_of (values, *p), "soundness: token comes from the input");
-      for (char **q = p + 1; *q; q++) __CPROVER_assert (strcmp (*p, *q) != 0, "uniqueness");
+      /* one chosen token is clean ... */
+      char *t = res[choose_below (n)];
+      __CPROVER_assert (*t != '\0', "no empty token");
+      for (char *c = t; *c; c++) __CPROVER_assert (!is_sep (*c), "no separator inside a token");
+      __CPROVER_assert (!model_isspace (t[0]), "no leading whitespace");
+      __CPROVER_assert (!model_isspace (t[strlen (t) - 1]), "no trailing whitespace");
+      /* ... and differs from any other chosen token (uniqueness) */
+      unsigned k2 = choose_below (n);
+      if (res[k2] != t) __CPROVER_assert (strcmp (res[k2], t) != 0, "uniqueness");
     }
-  check_complete (values, res);
-  if (!values || !values[0]) __CPROVER_assert (res[0] == NULL, "no input -> empty list");
+  if (n > 0 && WANT (1))
+    __CPROVER_assert (is_run_of (values, res[choose_below (n)]), "soundness: token comes from the input");
+
+  if (nv > 0 && WANT (2))
+    {
+      /* completeness: a chosen maximal separator-free run of a chosen input, if it has content,
+       * appears in the output */
+      const char *v = values[choose_below (nv)];
+      size_t len = strlen (v), a, b;
+      __CPROVER_assume (a <= b && b <= len);
+      __CPROVER_assume (a == 0 || is_sep (v[a - 1]));
+      __CPROVER_assume (b == len || is_sep (v[b]));
+      for (size_t i = a; i < b; i++) __CPROVER_assume (!is_sep (v[i]));
+      __CPROVER_assume (run_nonempty (v, a, b));
+      int found = 0;
+      for (char **p = res; *p; p++)
+        if (run_eq (v, a, b, *p)) found = 1;
+      __CPROVER_assert (found, "completeness: input token missing from output");
+    }
 
   /* run_lock: excludepkgs[0] ? join(",") -> dnf_conf_main_set_option */
-  if (res[0])
+  if (n > 0 && WANT (3))
     {
       gchar *globs = g_strjoinv (",", res);
       __CPROVER_assert (globs != NULL && globs[0] != '\0', "joined list is non-empty");
@@ -107,13 +166,18 @@ int main (void)
       char *one[2] = { globs, NULL };
       GStrv again = split_option_values (one);
       unsigned m = 0;
-      for (; again[m] && res[m]; m++) __CPROVER_assert (strcmp (again[m], res[m]) == 0, "round trip");
-      __CPROVER_assert (!again[m] && !res[m], "round trip: same length");
+      while (again[m]) m++;
+      __CPROVER_assert (m == n, "round trip: same length");
+      if (m == n)
+        {
+          unsigned k = choose_below (n);
+          __CPROVER_assert (strcmp (again[k], res[k]) == 0, "round trip");
+        }
       g_strfreev (again);
       g_free (globs);
     }
 
-  /* Non-vacuity (run.sh w-split-*): -DWITNESS=n asserts the NEGATION of an interesting shape, so
+/* Non-vacuity (run.sh w-split-*): -DWITNESS=n asserts the NEGATION of an interesting shape, so
    * CBMC must report exactly the assertion "witness" as failed, i.e. the shape is reachable. */
 #if defined(WITNESS) && WITNESS == 1
   __CPROVER_assert (!(res[0] && res[1]), "witness"); /* two distinct tokens kept */

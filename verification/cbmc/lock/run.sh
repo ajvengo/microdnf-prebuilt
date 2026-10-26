@@ -68,11 +68,20 @@ run_job() {
 # harnesses whose nested splits otherwise need > 6 GiB.
 RELAX_SETOPT="MODEL_RELAXED MODEL_STR_CAP=26 MODEL_MAXTOK=6"
 RELAX_SOLVE="MODEL_RELAXED MODEL_STR_CAP=8 MODEL_MAXTOK=8"
+# split_option_values: inputs of <= L=3 bytes, so a split has <= 4 tokens of <= 3 bytes (cap 4 incl. NUL).
+# The properties are separate jobs (h_split.c ONLY=n) because one job holding all of them needs > 6 GiB.
+SPLIT_B="L=3 NV=2 MODEL_RELAXED MODEL_STR_CAP=4 MODEL_MAXTOK=4"
+# negative controls only need to show the mutant is rejected: smaller inputs, more time margin
+SPLIT_N="L=2 NV=2 MODEL_RELAXED MODEL_STR_CAP=3 MODEL_MAXTOK=3"
+# round trip splits the joined result a second time: a single occurrence only (2 occurrences do not fit)
+SPLIT_RT="L=3 NV=1 ONLY=3 MODEL_RELAXED MODEL_STR_CAP=4 MODEL_MAXTOK=4"
 
 # ---------------------------------------------------------------- proofs
 SPLIT=lock.c:split_option_values
-job split          h_split.c     pass    14 "L=4"            $SPLIT
-job split-alpha    h_split.c     pass    22 "L=8 MODEL_ALPHABET(c)=((c)==97||(c)==98||(c)==44||(c)==32||(c)==9)" $SPLIT
+job split-basic    h_split.c     pass    6  "$SPLIT_B ONLY=0"              $SPLIT
+job split-sound    h_split.c     pass    6  "$SPLIT_B ONLY=1 FLAT_SOUND"   $SPLIT
+job split-complete h_split.c     pass    6  "$SPLIT_B ONLY=2"              $SPLIT
+job split-trip     h_split.c     pass    6  "$SPLIT_RT"                    $SPLIT
 job basearch       h_basearch.c  pass    12 "L=7"            lock-main.c:basearch_for_arch
 job solvearch      h_solvearch.c pass    ${US:-16} "L=${LS:-6} $RELAX_SOLVE"            lock-main.c:find_solve_arch
 job usebest        h_usebest.c   pass    8  ""               lock.c:lock_use_best
@@ -83,9 +92,9 @@ for sel in 0 1 2 3 4 5 6 7; do
 done
 
 # ---------------------------------------------------------------- witnesses (non-vacuity)
-job w-split-two    h_split.c     witness 14 "L=4 WITNESS=1" $SPLIT
-job w-split-dedup  h_split.c     witness 14 "L=4 WITNESS=2" $SPLIT
-job w-split-comma  h_split.c     witness 14 "L=4 WITNESS=3" $SPLIT
+job w-split-two    h_split.c     witness 6  "$SPLIT_B ONLY=0 WITNESS=1" $SPLIT
+job w-split-dedup  h_split.c     witness 6  "$SPLIT_B ONLY=0 WITNESS=2" $SPLIT
+job w-split-comma  h_split.c     witness 6  "$SPLIT_B ONLY=0 WITNESS=3" $SPLIT
 job w-basearch     h_basearch.c  witness 12 "L=7"            lock-main.c:basearch_for_arch
 job w-solvearch    h_solvearch.c witness 16 "L=6 $RELAX_SOLVE" lock-main.c:find_solve_arch
 job w-usebest      h_usebest.c   witness 8  ""               lock.c:lock_use_best
@@ -94,13 +103,13 @@ job w-setopt-plat  h_setopt.c    witness 26 "L=3 SEL=3 $RELAX_SETOPT"      lock-
 job w-setopt-excl  h_setopt.c    witness 26 "L=3 SEL=4 $RELAX_SETOPT"      lock-main.c:process_global_option
 
 # ---------------------------------------------------------------- negative controls
-job n-split-empty  h_split.c     fail    14 "L=4"            "$SPLIT::if (**tok && =>if ("
-job n-split-dedup  h_split.c     fail    14 "L=4"            "$SPLIT::!g_ptr_array_find_with_equal_func (out, *tok, g_str_equal, NULL)=>1"
-job n-split-term   h_split.c     fail    14 "L=4"            "$SPLIT::  g_ptr_array_add (out, NULL);
+job n-split-empty  h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::if (**tok && =>if ("
+job n-split-dedup  h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::!g_ptr_array_find_with_equal_func (out, *tok, g_str_equal, NULL)=>1"
+job n-split-term   h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::  g_ptr_array_add (out, NULL);
 =>"
-job n-split-leak   h_split.c     fail    14 "L=4"            "$SPLIT::g_auto(GStrv) tokens=>GStrv tokens"
-job n-split-dup    h_split.c     fail    14 "L=4"            "$SPLIT::g_ptr_array_add (out, g_strdup (*tok))=>g_ptr_array_add (out, *tok)"
-job n-split-strip  h_split.c     fail    14 "L=4"            "$SPLIT::          g_strstrip (*tok);
+job n-split-leak   h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::g_auto(GStrv) tokens=>GStrv tokens"
+job n-split-dup    h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::g_ptr_array_add (out, g_strdup (*tok))=>g_ptr_array_add (out, *tok)"
+job n-split-strip  h_split.c     fail    6  "$SPLIT_N ONLY=0"            "$SPLIT::          g_strstrip (*tok);
 =>"
 job n-basearch-oob h_basearch.c  fail    12 "L=7"            "lock-main.c:basearch_for_arch::arch[0] == 'i' && arch[1] != '\\0'=>arch[1] == 'i' && arch[2] != '\\0'"
 job n-basearch-len h_basearch.c  fail    12 "L=7"            "lock-main.c:basearch_for_arch:: && strlen (arch) == 4=>"

@@ -311,7 +311,10 @@ static gchar *g_strchug (gchar *s)
   gchar *st = s;
   while (*st && model_isspace (*st))
     st++;
-  memmove (s, st, strlen (st) + 1);
+  /* byte loop, not memmove: memmove of symbolic size is one huge array update for CBMC */
+  size_t n = strlen (st) + 1;
+  for (size_t i = 0; i < n; i++)
+    s[i] = st[i];
   return s;
 }
 
@@ -376,7 +379,14 @@ static gchar *g_build_path (const gchar *sep, const gchar *a, const gchar *b, co
   return r;
 }
 
-/* GPtrArray: exact-fit storage. */
+/* GPtrArray. While the array is being built, `pdata` is ONE fixed-capacity buffer (MODEL_PTR_CAP
+ * slots, overflow is asserted): growing by malloc-copy-free on every add made CBMC track a new heap
+ * object per element and per unwinding, which blew the formula up. g_ptr_array_free (a, FALSE) hands
+ * back an EXACT-FIT copy of the `len` elements, so the caller still gets an out-of-bounds if it
+ * reads past what it added (e.g. a missing NULL terminator). */
+#ifndef MODEL_PTR_CAP
+#define MODEL_PTR_CAP 16
+#endif
 typedef struct
 {
   gpointer *pdata;
@@ -387,7 +397,7 @@ typedef struct
 static GPtrArray *g_ptr_array_new_with_free_func (void (*f) (gpointer))
 {
   GPtrArray *a = g_malloc (sizeof *a);
-  a->pdata = NULL;
+  a->pdata = g_malloc (MODEL_PTR_CAP * sizeof (gpointer));
   a->len = 0;
   a->free_func = f;
   return a;
@@ -396,13 +406,8 @@ static GPtrArray *g_ptr_array_new_with_free_func (void (*f) (gpointer))
 static void g_ptr_array_add (GPtrArray *a, gpointer d)
 {
   MODEL_ASSERT (a != NULL, "g_ptr_array_add: NULL array");
-  MODEL_ASSERT (a->len < UINT_MAX, "g_ptr_array_add: length overflow");
-  gpointer *np = g_malloc (((size_t)a->len + 1) * sizeof (gpointer));
-  for (guint i = 0; i < a->len; i++)
-    np[i] = a->pdata[i];
-  np[a->len] = d;
-  g_free (a->pdata);
-  a->pdata = np;
+  MODEL_ASSERT (a->len < MODEL_PTR_CAP, "model bound MODEL_PTR_CAP too small");
+  a->pdata[a->len] = d;
   a->len++;
 }
 
@@ -421,19 +426,25 @@ static gboolean g_ptr_array_find_with_equal_func (GPtrArray *a, gconstpointer ne
   return FALSE;
 }
 
-/* free_segment == FALSE hands the storage to the caller; elements are NOT freed. */
+/* free_segment == FALSE hands the storage to the caller (exact-fit copy; NULL when empty);
+ * elements are NOT freed. */
 static gpointer g_ptr_array_free (GPtrArray *a, gboolean free_segment)
 {
   MODEL_ASSERT (a != NULL, "g_ptr_array_free: NULL");
-  gpointer *seg = a->pdata;
+  gpointer *seg = NULL;
   if (free_segment)
     {
       if (a->free_func)
         for (guint i = 0; i < a->len; i++)
           a->free_func (a->pdata[i]);
-      g_free (seg);
-      seg = NULL;
     }
+  else if (a->len)
+    {
+      seg = g_malloc ((size_t)a->len * sizeof (gpointer));
+      for (guint i = 0; i < a->len; i++)
+        seg[i] = a->pdata[i];
+    }
+  g_free (a->pdata);
   g_free (a);
   return seg;
 }
