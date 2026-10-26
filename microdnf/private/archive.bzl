@@ -99,6 +99,7 @@ rpm_archive = rule(
         "rpm2archive_tool": attr.label(
             default = Label("//microdnf:rpm2archive"),
             executable = True,
+            allow_files = True,
             cfg = "exec",
             doc = "The rpm2archive binary. Downstream modules that cannot use the default pass @microdnf_tools//:rpm2archive.",
         ),
