@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rpm_lock attributes excludepkgs, module_enable, module_platform_id, nobest and forcearch
+# rpm_lock attributes excludepkgs, module_enable, module_platform_id, nobest, install_weak_deps and forcearch
 # reach dnf_lock: each lockfile resolves differently from the defaults.
 set -euo pipefail
 
@@ -22,4 +22,6 @@ check(sys.argv[2], ["bestapp-1.0-1.noarch"], "nobest falls back to bestapp-1.0")
 check(sys.argv[3], ["mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"],
       "module_enable and module_platform_id expose the mysql:8.4 stream")
 check(sys.argv[4], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
+# dnf: install_weak_deps=False in dnf.conf skips Recommends (weakapp Recommends weakdep).
+check(sys.argv[5], ["weakapp-1.0-1.noarch"], "install_weak_deps = False leaves the Recommends out")
 ' "$@"

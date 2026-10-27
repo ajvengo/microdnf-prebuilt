@@ -188,17 +188,46 @@ REPO
 }
 
 section_weakdeps() {
-  echo "--- weak dependencies (weakapp Recommends weakdep)"
-  expect_lock "Recommends are installed and locked, as dnf does" \
-    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp
-  expect_lock "--setopt=install_weak_deps=False leaves them out" \
-    "weakapp-1.0-1.noarch" weakapp --setopt=install_weak_deps=False
-  expect_lock "--exclude still follows Recommends of kept packages" \
-    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp --exclude=nothing-matches
-  expect_lock "--exclude trims an excluded Recommends" \
-    "weakapp-1.0-1.noarch" weakapp --exclude=weakdep
-  expect_lock "a Recommends that is requested too stays" \
-    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp weakdep --exclude=weakdep
+  echo "--- weak dependencies"
+  local weak_both="weakapp-1.0-1.noarch weakdep-1.0-1.noarch"
+  # dnf with install_weak_deps=True (the EL default) installs the Recommends of what
+  # it installs. dnf_lock passes no flag for it, so this is libsolv's own default.
+  expect_lock "Recommends are installed and locked, as dnf does" "${weak_both}" weakapp
+  # dnf --setopt=install_weak_deps=<bool>: OptionBool takes 0/1, false/true, False/True, no/yes, off/on.
+  for off in False false 0 no off; do
+    expect_lock "--setopt=install_weak_deps=${off} leaves Recommends out, like dnf" \
+      "weakapp-1.0-1.noarch" weakapp --setopt=install_weak_deps="${off}"
+  done
+  for on in True 1; do
+    expect_lock "--setopt=install_weak_deps=${on} keeps them, like dnf" "${weak_both}" weakapp --setopt=install_weak_deps="${on}"
+  done
+  # dnf --exclude drops the excluded package, never one that is requested.
+  expect_lock "--exclude still follows Recommends of kept packages" "${weak_both}" weakapp --exclude=nothing-matches
+  expect_lock "--exclude trims an excluded Recommends" "weakapp-1.0-1.noarch" weakapp --exclude=weakdep
+  expect_lock "a Recommends that is requested too stays" "${weak_both}" weakapp weakdep --exclude=weakdep
+
+  # Supplements are reverse weak dependencies: dnf (libsolv) installs suppapp
+  # because suppbase is being installed, though suppbase says nothing about it.
+  local supp_both="suppapp-1.0-1.noarch suppbase-1.0-1.noarch"
+  expect_lock "Supplements pull the supplementing package in" "${supp_both}" suppbase
+  expect_lock "--exclude keeps a Supplements package whose target is kept" "${supp_both}" suppbase --exclude=nothing-matches
+  expect_lock "--exclude trims an excluded Supplements package" "suppbase-1.0-1.noarch" suppbase --exclude=suppapp
+  expect_lock "a Supplements package that is requested stays" "${supp_both}" suppbase suppapp --exclude=suppapp
+  expect_lock "--setopt=install_weak_deps=False skips Supplements too" \
+    "suppbase-1.0-1.noarch" suppbase --setopt=install_weak_deps=False
+
+  # Rich dependencies: rpm:entry names such as "(a if b)" are parsed by libsolv; the
+  # trim finds the edges through a provides query on the same dependency.
+  local rich_rec="richapp-1.0-1.noarch richdep-1.0-1.noarch richtrigger-1.0-1.noarch"
+  expect_lock "a conditional Recommends is installed when its condition holds" "${rich_rec}" richapp richtrigger
+  expect_lock "--exclude keeps what a conditional Recommends installed" "${rich_rec}" richapp richtrigger --exclude=nothing-matches
+  expect_lock "--exclude trims an excluded conditional Recommends" \
+    "richapp-1.0-1.noarch richtrigger-1.0-1.noarch" richapp richtrigger --exclude=richdep
+  local rich_supp="richbase-1.0-1.noarch richsupp-1.0-1.noarch richtrigger-1.0-1.noarch"
+  expect_lock "a boolean Supplements is installed when both operands are" "${rich_supp}" richbase richtrigger
+  expect_lock "--exclude keeps what a boolean Supplements installed" "${rich_supp}" richbase richtrigger --exclude=nothing-matches
+  expect_lock "--exclude trims an excluded boolean Supplements package" \
+    "richbase-1.0-1.noarch richtrigger-1.0-1.noarch" richbase richtrigger --exclude=richsupp
 }
 
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.

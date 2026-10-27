@@ -366,7 +366,13 @@ pick_one_pkg_per_name_arch (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
 
 /* Records the weak-dependency edges of @pkg_name in @edges (name -> set of names):
  * from the packages its @deps (Recommends) name to it, or with @reverse
- * (Supplements) from them to it, limited to the packages of the solve. */
+ * (Supplements) from them to it, limited to the packages of the solve. (libsolv
+ * does not pull a package in for a Supplements trigger a layer below installed,
+ * so such a trigger needs no edge.)
+ * Rich dependencies need no parsing: the provides query of a boolean dependency
+ * returns the providers of every operand ("(foo and bar)" matches foo and bar,
+ * "(a if b)" matches a), so an edge can be added that the solver would not
+ * follow, never one fewer. */
 static void
 collect_weak_edges (HyQuery dep_query, DnfReldepList *deps, GHashTable *id_to_pkg,
                     const char *pkg_name, gboolean reverse, GHashTable *edges)
