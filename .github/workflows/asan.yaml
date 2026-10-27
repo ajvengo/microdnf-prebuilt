@@ -42,7 +42,7 @@ jobs:
       - name: Confirm the binary is really instrumented
         run: |
           bazel build --config=ci --config=asan --remote_download_outputs=toplevel //:dnf_lock
-          bin="$(bazel info --config=ci --config=asan bazel-bin)/dnf/dnf_lock"
+          bin=bazel-bin/dnf/dnf_lock_linux_amd64/dnf_lock
           ls -l "$bin"
           nm "$bin" 2>/dev/null | grep -c __asan_ || true
           nm "$bin" 2>/dev/null | grep -c __lsan_ || true
