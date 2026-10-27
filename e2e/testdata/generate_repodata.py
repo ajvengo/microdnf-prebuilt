@@ -182,10 +182,24 @@ FEATURE_PACKAGES = [
     # weak dependencies: weakapp Recommends weakdep, which nothing requires.
     ("weakapp", 0, "1.0", "1", "noarch", []),
     ("weakdep", 0, "1.0", "1", "noarch", []),
+    # Supplements: suppapp is pulled in only because suppbase is installed.
+    ("suppbase", 0, "1.0", "1", "noarch", []),
+    ("suppapp", 0, "1.0", "1", "noarch", []),
+    # Rich (boolean) weak dependencies, written as rpm:entry names like rpm does.
+    ("richapp", 0, "1.0", "1", "noarch", []),
+    ("richdep", 0, "1.0", "1", "noarch", []),
+    ("richtrigger", 0, "1.0", "1", "noarch", []),
+    ("richbase", 0, "1.0", "1", "noarch", []),
+    ("richsupp", 0, "1.0", "1", "noarch", []),
 ]
 
-# Recommends of FEATURE_PACKAGES, by package name.
-FEATURE_RECOMMENDS = {"weakapp": ["weakdep"]}
+# Weak dependencies of FEATURE_PACKAGES by package name and rpm:<tag>.
+FEATURE_WEAK = {
+    "weakapp": {"recommends": ["weakdep"]},
+    "suppapp": {"supplements": ["suppbase"]},
+    "richapp": {"recommends": ["(richdep if richtrigger)"]},
+    "richsupp": {"supplements": ["(richbase and richtrigger)"]},
+}
 
 FEATURE_MODULES_YAML = b"""---
 document: modulemd
@@ -257,10 +271,10 @@ def feature_repodata():
             primary.append("    <rpm:requires>")
             primary += [f'      <rpm:entry name="{dep}"/>' for dep in requires]
             primary.append("    </rpm:requires>")
-        if name in FEATURE_RECOMMENDS:
-            primary.append("    <rpm:recommends>")
-            primary += [f'      <rpm:entry name="{dep}"/>' for dep in FEATURE_RECOMMENDS[name]]
-            primary.append("    </rpm:recommends>")
+        for tag, deps in FEATURE_WEAK.get(name, {}).items():
+            primary.append(f"    <rpm:{tag}>")
+            primary += [f'      <rpm:entry name="{dep}"/>' for dep in deps]
+            primary.append(f"    </rpm:{tag}>")
         primary += ["  </format>", "</package>"]
         stubs += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
 

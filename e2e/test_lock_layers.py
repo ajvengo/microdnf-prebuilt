@@ -147,6 +147,17 @@ for CASE, repo, entry, want in [
     rc, nevras, err, obsoleted = lock(CASE, repo, [entry], ["app", "extra"])
     check(CASE, (rc, nevras), (0, want), err)
 
+# dnf installs the Recommends of what it installs (install_weak_deps=True), unless a layer below has them.
+CASE = "a Recommends missing below is locked with its package"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "app", "recommends": ["extra"]}, {"name": "extra"}, {"name": "base"}],
+                                  [locked("base")], ["app"])
+check(CASE, (rc, nevras), (0, ["app-1-1.noarch", "extra-1-1.noarch"]), err)
+
+CASE = "a Recommends installed below is not locked again"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "app", "recommends": ["extra"]}, {"name": "extra"}],
+                                  [locked("extra")], ["app"])
+check(CASE, (rc, nevras), (0, ["app-1-1.noarch"]), err)
+
 for CASE, entry, message in [
         ("a lockfile entry without a name is an error",
          {"version": "1-1", "arch": "noarch", "nevra": "tour-1-1.noarch"}, "package 0 has no name"),
