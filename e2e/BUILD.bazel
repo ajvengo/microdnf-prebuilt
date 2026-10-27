@@ -1,6 +1,7 @@
 load("@rules_bazel_integration_test//bazel_integration_test:defs.bzl", "bazel_integration_test", "default_test_runner")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
-load("//microdnf:defs.bzl", "rpm_archive", "rpm_extract", "rpm_lock")
+load("//microdnf:defs.bzl", "rpm_archive", "rpm_extract", "rpm_lock", "rpm_mark")
+load("//microdnf/private:package.bzl", "rpm_package")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -19,9 +20,11 @@ sh_test(
         "$(location //:rpm2archive)",
         "$(location //:dnf_lock)",
         "$(location //:rpm2files)",
+        "$(location //:mark)",
     ],
     data = [
         "//:dnf_lock",
+        "//:mark",
         "//:microdnf",
         "//:rpm2archive",
         "//:rpm2files",
@@ -131,6 +134,114 @@ sh_test(
     ],
 )
 
+# dnf_lock options: --excludepkgs, --module-enable, --best/--nobest, --forcearch, duplicate repos, weak deps
+sh_test(
+    name = "lock_features_test",
+    srcs = ["test_lock_features.sh"],
+    args = [
+        "$(location //:dnf_lock)",
+        "$(location //e2e/testdata:features-repo/repodata/repomd.xml)",
+    ],
+    data = [
+        "//:dnf_lock",
+        "//e2e/testdata:features-repo/repodata/repomd.xml",
+        "//e2e/testdata:features_repo_files",
+    ],
+    # One section per shard (see SECTIONS in the script).
+    shard_count = 6,
+)
+
+# The same options through the rpm_lock attributes
+rpm_lock(
+    name = "attrs_excludepkgs_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    excludepkgs = ["ca-certificates-2026.2.92_v9.0.319-*"],
+    packages = ["certuser"],
+    out = "attrs_excludepkgs.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "attrs_nobest_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    nobest = True,
+    packages = ["bestapp"],
+    out = "attrs_nobest.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "attrs_noweak_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    install_weak_deps = False,
+    packages = ["weakapp"],
+    out = "attrs_noweak.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "attrs_module_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    module_enable = ["mysql:8.4"],
+    module_platform_id = "platform:el9",
+    packages = ["mysql"],
+    out = "attrs_module.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "attrs_forcearch_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    forcearch = "x86_64",
+    packages = ["expat"],
+    out = "attrs_forcearch.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+sh_test(
+    name = "lock_attrs_test",
+    srcs = ["test_lock_attrs.sh"],
+    args = [
+        "$(location :attrs_excludepkgs.lock.json)",
+        "$(location :attrs_nobest.lock.json)",
+        "$(location :attrs_module.lock.json)",
+        "$(location :attrs_forcearch.lock.json)",
+        "$(location :attrs_noweak.lock.json)",
+    ],
+    data = [
+        ":attrs_excludepkgs.lock.json",
+        ":attrs_forcearch.lock.json",
+        ":attrs_module.lock.json",
+        ":attrs_nobest.lock.json",
+        ":attrs_noweak.lock.json",
+    ],
+)
+
 # Step 3 test: RPM proxy repository test
 sh_test(
     name = "test_rpm_repository_test",
@@ -213,6 +324,8 @@ sh_test(
 rpm_archive(
     name = "tour_archive_zstd",
     compression = "zstd",
+    # the prebuilt rpm2archive predates zstd output, so build it from source here
+    rpm2archive_tool = "//:rpm2archive",
     rpms = ["@test_rpms//:tour"],
 )
 
@@ -251,40 +364,9 @@ sh_test(
 default_test_runner(
     name = "default_test_runner",
     bazel_cmds = [
-        # `test //...` builds every target too; a separate build or `info` only adds a pass.
+        "info",
+        "build //...",
         "test //...",
-    ],
-)
-
-config_setting(
-    name = "is_linux_x86_64",
-    constraint_values = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:linux",
-    ],
-)
-
-config_setting(
-    name = "is_linux_arm64",
-    constraint_values = [
-        "@platforms//cpu:aarch64",
-        "@platforms//os:linux",
-    ],
-)
-
-config_setting(
-    name = "is_darwin_x86_64",
-    constraint_values = [
-        "@platforms//cpu:x86_64",
-        "@platforms//os:macos",
-    ],
-)
-
-config_setting(
-    name = "is_darwin_arm64",
-    constraint_values = [
-        "@platforms//cpu:aarch64",
-        "@platforms//os:macos",
     ],
 )
 
@@ -292,10 +374,10 @@ config_setting(
 alias(
     name = "bazel_9_3_1",
     actual = select({
-        ":is_linux_x86_64": "@bazel_9_3_1_linux_x86_64//file",
-        ":is_linux_arm64": "@bazel_9_3_1_linux_arm64//file",
-        ":is_darwin_x86_64": "@bazel_9_3_1_darwin_x86_64//file",
-        ":is_darwin_arm64": "@bazel_9_3_1_darwin_arm64//file",
+        "@bazel_tools//src/conditions:linux_x86_64": "@bazel_9_3_1_linux_x86_64//file",
+        "@bazel_tools//src/conditions:linux_aarch64": "@bazel_9_3_1_linux_arm64//file",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@bazel_9_3_1_darwin_x86_64//file",
+        "@bazel_tools//src/conditions:darwin_arm64": "@bazel_9_3_1_darwin_arm64//file",
     }),
 )
 
@@ -329,6 +411,11 @@ bazel_integration_test(
     workspace_path = "e2e/smoke_test",
 )
 
+test_suite(
+    name = "downstream_e2e_tests",
+    tests = [":downstream_e2e_tests_bazel_9_3_1"],
+)
+
 sh_test(
     name = "lock_direct_test",
     srcs = ["test_lock_direct.sh"],
@@ -360,7 +447,60 @@ sh_test(
     ] + _SANITIZER_DATA,
 )
 
-test_suite(
-    name = "downstream_e2e_tests",
-    tests = [":downstream_e2e_tests_bazel_9_3_1"],
+# Step 7 test: Oracle Linux 9 curl binary extraction and rpmdb mark
+rpm_package(
+    name = "ol9_curl_package",
+    arch = "x86_64",
+    package_name = "curl",
+    rpm_file = "//e2e/testdata:ol9_repo/curl-7.76.1-40.el9_8.8.x86_64.rpm",
+    version = "7.76.1-40.el9_8.8",
+)
+
+rpm_archive(
+    name = "ol9_curl_archive",
+    compression = "gzip",
+    rpm2archive_tool = "//:rpm2archive",
+    rpms = [":ol9_curl_package"],
+)
+
+rpm_extract(
+    name = "extracted_ol9_curl",
+    archive = ":ol9_curl_archive",
+    executables = [
+        "usr/bin/curl",
+    ],
+    files = [
+        "usr/bin/curl",
+    ],
+)
+
+rpm_mark(
+    name = "ol9_marked_rpmdb",
+    arch = "x86_64",
+    packages = [
+        "curl=7.76.1-40.el9_8.8",
+    ],
+    releasever = "9",
+    repo_config = "//e2e/testdata:ol9_repo/ol9.repo",
+    repo_files = ["//e2e/testdata:ol9_repo_files"],
+)
+
+sh_test(
+    name = "oracle_linux_curl_mark_test",
+    srcs = ["test_ol9_curl_mark.sh"],
+    args = [
+        "$(location :extracted_ol9_curl/usr/bin/curl)",
+        "$(location :ol9_marked_rpmdb)",
+        "$(location //:mark)",
+        "$(location //e2e/testdata:ol9_repo/ol9.repo)",
+        "e2e/testdata/ol9_repo",
+    ],
+    data = [
+        ":extracted_ol9_curl",
+        ":extracted_ol9_curl/usr/bin/curl",
+        ":ol9_marked_rpmdb",
+        "//:mark",
+        "//e2e/testdata:ol9_repo/ol9.repo",
+        "//e2e/testdata:ol9_repo_files",
+    ],
 )
