@@ -77,6 +77,9 @@ test:ci --test_summary=terse
 build:asan --@llvm//config:asan=true
 build:asan --@llvm//config:ubsan=true
 build:asan --copt=-fno-sanitize-recover=undefined
+# GLib/GObject cast every class_init/base_init callback to GBaseInitFunc & co; clang's -fsanitize=function
+# flags each one. Proven third-party noise, dropped globally rather than suppressed.
+build:asan --copt=-fno-sanitize=function
 build:asan --copt=-fno-omit-frame-pointer
 build:asan --copt=-g1
 build:asan --strip=never
