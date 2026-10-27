@@ -4,7 +4,7 @@ name: Sanitizers
 # Separate from ci.yaml so it neither slows nor gates the main build.
 on:
   push:
-    branches: [main, probe/asan-dnf-lock]
+    branches: [main, probe/asan-dnf-lock, verify/asan-stack]
   pull_request_target:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
@@ -45,4 +45,4 @@ jobs:
       - name: dnf_lock e2e under ASan + LSan + UBSan
         run: >-
           bazel test --config=ci --config=asan
-          //e2e:lock_direct_test //e2e:lock_layers_test //e2e:test_tools_test
+          //e2e:lock_direct_test //e2e:lock_layers_test //e2e:lock_features_test //e2e:test_tools_test
