@@ -129,6 +129,24 @@ rc, nevras, err, obsoleted = lock(CASE, [{"name": "old"}, {"name": "new", "obsol
 check(CASE, (rc, nevras, obsoleted, "the solve obsoletes old-1-1.noarch from a layer below" in err),
       (0, ["new-1-1.noarch"], [{"name": "old", "version": "1-1", "arch": "noarch", "nevra": "old-1-1.noarch"}], True), err)
 
+# A layer entry without integrity means "same build". The old code compared it with the repo's integrity
+# via g_strcmp0 (NULL vs "sha256-..." is nonzero), so a requested package installed at the same NEVRA was
+# locked again. "dep" (a Recommends of app, absent below) is new and still locked; "extra" is unrelated.
+APP1 = [{"name": "app", "ver": "1", "recommends": ["dep"]}, {"name": "dep"}, {"name": "extra"}]
+APP12 = [{"name": "app", "ver": "2", "recommends": ["dep"]}, *APP1]
+NO_INTEGRITY = {k: v for k, v in locked("app", "1").items() if k != "integrity"}
+for CASE, repo, entry, want in [
+        ("a layer entry without integrity at the same NEVRA is unchanged", APP1, NO_INTEGRITY,
+         ["dep-1-1.noarch", "extra-1-1.noarch"]),
+        ("a layer entry with an empty integrity at the same NEVRA is unchanged", APP1,
+         {**NO_INTEGRITY, "integrity": ""}, ["dep-1-1.noarch", "extra-1-1.noarch"]),
+        ("a layer entry without integrity at another NEVRA is replaced", APP12, NO_INTEGRITY,
+         ["app-2-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"]),
+        ("a layer entry with another integrity counts as changed", APP1,
+         {**NO_INTEGRITY, "integrity": "sha256-AAAA"}, ["app-1-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"])]:
+    rc, nevras, err, obsoleted = lock(CASE, repo, [entry], ["app", "extra"])
+    check(CASE, (rc, nevras), (0, want), err)
+
 # dnf installs the Recommends of what it installs (install_weak_deps=True), unless a layer below has them.
 CASE = "a Recommends missing below is locked with its package"
 rc, nevras, err, obsoleted = lock(CASE, [{"name": "app", "recommends": ["extra"]}, {"name": "extra"}, {"name": "base"}],
