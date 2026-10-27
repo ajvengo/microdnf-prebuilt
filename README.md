@@ -64,7 +64,9 @@ for tests, so no manual steps are needed:
 bazel test --config=asan //e2e:lock_direct_test //e2e:lock_layers_test //e2e:test_tools_test
 ```
 
-The `Sanitizers` workflow runs exactly this on every pull request and push to `main`.
+Known third-party noise is suppressed in [`sanitizers/ubsan.supp`](sanitizers/ubsan.supp) and
+[`sanitizers/lsan.supp`](sanitizers/lsan.supp); both ship to the tests as data only under this config. Add an
+entry there, with a reason, rather than weakening the options. The `Sanitizers` workflow runs exactly this on every pull request and push to `main`.
 
 ## License
 
