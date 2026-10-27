@@ -989,7 +989,9 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
        * installation the providers of Recommends that the installed packages left
        * unmet, so an upgrade only adds the weak dependencies that are new. */
       g_autoptr(GError) depsolve_error = NULL;
-      if (!dnf_goal_depsolve (goal, (DnfGoalActions)run_flags, &depsolve_error))
+      /* Every target may already be in the layers below: an empty transaction is no failure. */
+      if (!dnf_goal_depsolve (goal, (DnfGoalActions)run_flags, &depsolve_error) &&
+          !g_error_matches (depsolve_error, DNF_ERROR, DNF_ERROR_NO_PACKAGES_TO_UPDATE))
         {
           g_autofree gchar *problems = lock_goal_describe_problems (goal);
           g_set_error (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
