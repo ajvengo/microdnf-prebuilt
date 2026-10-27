@@ -38,7 +38,8 @@ def write_repo(root, pkgs):
     for p in pkgs:
         name, ver, arch = p["name"], p.get("ver", "1"), p.get("arch", "noarch")
         deps = (entries("provides", [(name, ver)] + p.get("provides", [])) +
-                entries("requires", p.get("requires", [])) + entries("obsoletes", p.get("obsoletes", [])))
+                entries("requires", p.get("requires", [])) + entries("obsoletes", p.get("obsoletes", [])) +
+                entries("recommends", p.get("recommends", [])))
         xml.append(f"""<package type="rpm"><name>{name}</name><arch>{arch}</arch>
 <version epoch="0" ver="{ver}" rel="1"/><checksum type="sha256" pkgid="YES">{pkgid(name, ver, arch)}</checksum>
 <summary>s</summary><description>d</description><packager/><url/><time file="1" build="1"/>
@@ -127,6 +128,24 @@ CASE = "obsoleting a package below records it and warns"
 rc, nevras, err, obsoleted = lock(CASE, [{"name": "old"}, {"name": "new", "obsoletes": ["old"]}], [locked("old")], ["new"])
 check(CASE, (rc, nevras, obsoleted, "the solve obsoletes old-1-1.noarch from a layer below" in err),
       (0, ["new-1-1.noarch"], [{"name": "old", "version": "1-1", "arch": "noarch", "nevra": "old-1-1.noarch"}], True), err)
+
+# A layer entry without integrity means "same build". The old code compared it with the repo's integrity
+# via g_strcmp0 (NULL vs "sha256-..." is nonzero), so a requested package installed at the same NEVRA was
+# locked again, and its Recommends with it. "extra" keeps the output non-empty.
+APP1 = [{"name": "app", "ver": "1", "recommends": ["dep"]}, {"name": "dep"}, {"name": "extra"}]
+APP12 = [{"name": "app", "ver": "2", "recommends": ["dep"]}, *APP1]
+NO_INTEGRITY = {k: v for k, v in locked("app", "1").items() if k != "integrity"}
+for CASE, repo, entry, want in [
+        ("a layer entry without integrity at the same NEVRA is unchanged", APP1, NO_INTEGRITY,
+         ["extra-1-1.noarch"]),
+        ("a layer entry with an empty integrity at the same NEVRA is unchanged", APP1,
+         {**NO_INTEGRITY, "integrity": ""}, ["extra-1-1.noarch"]),
+        ("a layer entry without integrity at another NEVRA is replaced", APP12, NO_INTEGRITY,
+         ["app-2-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"]),
+        ("a layer entry with another integrity counts as changed", APP1,
+         {**NO_INTEGRITY, "integrity": "sha256-AAAA"}, ["app-1-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"])]:
+    rc, nevras, err, obsoleted = lock(CASE, repo, [entry], ["app", "extra"])
+    check(CASE, (rc, nevras), (0, want), err)
 
 for CASE, entry, message in [
         ("a lockfile entry without a name is an error",

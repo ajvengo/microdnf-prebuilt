@@ -72,6 +72,20 @@ lookup_installed (GHashTable *installed_by_key, DnfPackage *pkg, const gchar **i
 }
 
 static gchar *
+compute_package_integrity (DnfPackage *pkg);
+
+/* TRUE if the layer's recorded integrity says @pkg is a different build. A missing or
+ * empty integrity on either side says nothing, so it counts as the same build. */
+static gboolean
+layer_integrity_differs (const gchar *layer_integrity, DnfPackage *pkg)
+{
+  if (!layer_integrity || !*layer_integrity)
+    return FALSE;
+  g_autofree gchar *integrity = compute_package_integrity (pkg);
+  return integrity && *integrity && g_strcmp0 (layer_integrity, integrity) != 0;
+}
+
+static gchar *
 compute_package_integrity (DnfPackage *pkg)
 {
   int chk_type = 0;
@@ -725,8 +739,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
           if (cand_pkgs && cand_pkgs->len > 0)
             {
               DnfPackage *cand = g_ptr_array_index (cand_pkgs, 0);
-              g_autofree gchar *cand_integrity = compute_package_integrity (cand);
-              if (inst->integrity && cand_integrity && g_strcmp0 (inst->integrity, cand_integrity) != 0)
+              if (layer_integrity_differs (inst->integrity, cand))
                 {
                   /* RPM integrity changed! Do not mark as installed so solver fetches updated package */
                   continue;
@@ -921,12 +934,8 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
             {
               g_ptr_array_add (all_pkgs, g_object_ref (pkg));
             }
-          else
-            {
-              g_autofree gchar *integrity = compute_package_integrity (pkg);
-              if (g_strcmp0 (integrity, inst->integrity) != 0)
-                g_ptr_array_add (all_pkgs, g_object_ref (pkg));
-            }
+          else if (layer_integrity_differs (inst->integrity, pkg))
+            g_ptr_array_add (all_pkgs, g_object_ref (pkg));
         }
 
       g_autoptr(GPtrArray) installs = hy_goal_list_installs (goal, NULL);
@@ -940,12 +949,8 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                 {
                   g_ptr_array_add (all_pkgs, g_object_ref (pkg));
                 }
-              else
-                {
-                  g_autofree gchar *integrity = compute_package_integrity (pkg);
-                  if (g_strcmp0 (integrity, inst->integrity) != 0)
-                    g_ptr_array_add (all_pkgs, g_object_ref (pkg));
-                }
+              else if (layer_integrity_differs (inst->integrity, pkg))
+                g_ptr_array_add (all_pkgs, g_object_ref (pkg));
             }
         }
 
