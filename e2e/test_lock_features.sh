@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dnf_lock option tests against the synthetic "features" repository:
-# --excludepkgs, --module-enable, --best/--nobest and --forcearch.
+# --excludepkgs, --module-enable, --best/--nobest, --forcearch and equal-priority
+# repos that carry the same packages.
 set -euo pipefail
 
 DNF_LOCK="$1"
@@ -24,6 +25,7 @@ ARCHLIST=x86_64,noarch
 CA_OLD="ca-certificates-2025.2.80_v9.0.305-1.el9.noarch certuser-1.0-1.noarch"
 CA_NEW="ca-certificates-2026.2.92_v9.0.319-1.el9.noarch certuser-1.0-1.noarch"
 EXPAT_OLD="expat-2.7.2-1.el10.x86_64"
+EXPAT_NEW="expat-2.7.3-1.el10_2.7.x86_64"
 MYSQL_MODULAR="mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"
 
 FAILURES=0
@@ -156,8 +158,37 @@ REPO
     "expat-2.7.3-1.el10_2.7.x86_64" expat --forcearch=x86_64
 }
 
+section_duprepos() {
+  echo "--- the same NEVRA in two enabled repos of equal priority"
+  # Two repos on the same metadata: every package exists once per repo, the way
+  # appstream and baseos can both carry libtool-ltdl. The solver must install one
+  # of them, not fail with "cannot install both X from repoA and X from repoB".
+  mkdir -p "${WORK}/duprepos.d"
+  cat > "${WORK}/duprepos.d/dup.repo" <<REPO
+[dup-a]
+name=dup-a
+baseurl=file://${REPO_DIR}
+enabled=1
+gpgcheck=0
+
+[dup-b]
+name=dup-b
+baseurl=file://${REPO_DIR}
+enabled=1
+gpgcheck=0
+REPO
+  REPOSDIR="${WORK}/duprepos.d" expect_lock "an identical package in two repos is locked once" \
+    "libfoo-2.0-1.noarch" libfoo
+  REPOSDIR="${WORK}/duprepos.d" expect_lock "its dependencies resolve across both repos" \
+    "${CA_NEW}" certuser
+  REPOSDIR="${WORK}/duprepos.d" expect_lock "--nobest locks it once as well" \
+    "libfoo-2.0-1.noarch" libfoo --nobest
+  REPOSDIR="${WORK}/duprepos.d" expect_lock "the newest candidate still wins with two repos" \
+    "${EXPAT_NEW}" expat --forcearch=x86_64
+}
+
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.
-SECTIONS=(best excludepkgs modules basearch)
+SECTIONS=(best excludepkgs modules basearch duprepos)
 if [ -n "${TEST_SHARD_STATUS_FILE:-}" ]; then touch "${TEST_SHARD_STATUS_FILE}"; fi
 for i in "${!SECTIONS[@]}"; do
   if [ $((i % ${TEST_TOTAL_SHARDS:-1})) -eq "${TEST_SHARD_INDEX:-0}" ]; then
