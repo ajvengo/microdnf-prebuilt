@@ -49,8 +49,10 @@ bazel run //:microdnf -- lock -o lockfile.json --setopt=reposdir=/path/to/repos.
 
 When several enabled repos carry the same package (the same NEVRA in appstream and baseos, say), the lock holds it once, taken from the repo that wins on priority and cost.
 
+The lock holds every package the solver installs, weak dependencies (Recommends, matching Supplements) included, as dnf does with its default `install_weak_deps=True`; `--setopt=install_weak_deps=False` leaves them out. `--exclude` is the one thing that prunes the result: it drops the excluded packages and whatever is reachable only through them (following Recommends and Supplements too).
+
 Any other `--setopt=<key>=<value>` or `<repo>.<key>=<value>` goes to libdnf. `rpm_lock` exposes the same knobs as `excludepkgs`,
-`forcearch`, `module_enable`, `module_platform_id` and `nobest` attributes.
+`forcearch`, `module_enable`, `module_platform_id`, `nobest` and `install_weak_deps` attributes.
 
 ### 3. Hermetic Host Portability
 - Automatic hermetic fallback configuration when `/usr/lib/rpm/rpmrc` is absent on host systems.
