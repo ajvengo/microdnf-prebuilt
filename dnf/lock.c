@@ -447,6 +447,25 @@ resolve_package_url (DnfPackage *pkg, DnfContext *ctx)
   return g_strdup (loc);
 }
 
+/* Splits repeated "a,b c" option values into a NULL-terminated, de-duplicated list. */
+static GStrv
+split_option_values (GStrv values)
+{
+  g_autoptr(GPtrArray) out = g_ptr_array_new_with_free_func (g_free);
+  for (char **val = values; val && *val; ++val)
+    {
+      g_auto(GStrv) tokens = g_strsplit_set (*val, ", ", -1);
+      for (char **tok = tokens; *tok; ++tok)
+        {
+          g_strstrip (*tok);
+          if (**tok && !g_ptr_array_find_with_equal_func (out, *tok, g_str_equal, NULL))
+            g_ptr_array_add (out, g_strdup (*tok));
+        }
+    }
+  g_ptr_array_add (out, NULL);
+  return (GStrv)g_ptr_array_free (g_steal_pointer (&out), FALSE);
+}
+
 gboolean
 run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GError **error)
 {
@@ -454,6 +473,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   g_autofree gchar *opt_archlist = NULL;
   g_autofree gchar *opt_forcearch = NULL;
   g_auto(GStrv) opt_exclude = NULL;
+  g_auto(GStrv) opt_excludepkgs = NULL;
   g_auto(GStrv) opt_lockfiles = NULL;
   g_auto(GStrv) opt_packages = NULL;
 
@@ -462,6 +482,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     { "archlist", '\0', 0, G_OPTION_ARG_STRING, &opt_archlist, "Limit query to packages of given architectures", "ARCH,..." },
     { "forcearch", '\0', 0, G_OPTION_ARG_STRING, &opt_forcearch, "Solve for this architecture instead of the host's (default: first non-noarch --archlist entry)", "ARCH" },
     { "exclude", 'x', 0, G_OPTION_ARG_STRING_ARRAY, &opt_exclude, "Exclude package and its unneeded dependencies unless directly requested", "PKG,..." },
+    { "excludepkgs", '\0', 0, G_OPTION_ARG_STRING_ARRAY, &opt_excludepkgs, "Hide packages matching NEVRA globs from the solver, like dnf --exclude/excludepkgs=", "GLOB,..." },
     { "lockfile", 'l', 0, G_OPTION_ARG_FILENAME_ARRAY, &opt_lockfiles, "Ordered list of lockfiles from previous layers", "FILE" },
     { "lock-file", 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &opt_lockfiles, "Ordered list of lockfiles from previous layers", "FILE" },
     { G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_STRING_ARRAY, &opt_packages, "Target packages", "PACKAGE..." },
@@ -471,6 +492,15 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   g_option_context_add_main_entries (opt_ctx, entries, NULL);
   if (!g_option_context_parse (opt_ctx, &argc, &argv, error))
     return FALSE;
+
+  /* dnf excludepkgs: applied by libdnf while the repos are added to the sack */
+  g_auto(GStrv) excludepkgs = split_option_values (opt_excludepkgs);
+  if (excludepkgs[0])
+    {
+      g_autofree gchar *globs = g_strjoinv (",", excludepkgs);
+      if (!dnf_conf_main_set_option ("excludepkgs", DNF_CONF_COMMANDLINE, globs, error))
+        return FALSE;
+    }
 
   /* Collect ordered list of lockfile paths from options and remaining arguments */
   g_autoptr(GPtrArray) ordered_lockfiles = g_ptr_array_new_with_free_func (g_free);
