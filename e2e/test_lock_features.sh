@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # dnf_lock option tests against the synthetic "features" repository:
 # --excludepkgs, --module-enable, --best/--nobest, --forcearch and equal-priority
-# repos that carry the same packages.
+# repos that carry the same packages, and weak dependencies.
 set -euo pipefail
 
 DNF_LOCK="$1"
@@ -187,8 +187,22 @@ REPO
     "${EXPAT_NEW}" expat --forcearch=x86_64
 }
 
+section_weakdeps() {
+  echo "--- weak dependencies (weakapp Recommends weakdep)"
+  expect_lock "Recommends are installed and locked, as dnf does" \
+    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp
+  expect_lock "--setopt=install_weak_deps=False leaves them out" \
+    "weakapp-1.0-1.noarch" weakapp --setopt=install_weak_deps=False
+  expect_lock "--exclude still follows Recommends of kept packages" \
+    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp --exclude=nothing-matches
+  expect_lock "--exclude trims an excluded Recommends" \
+    "weakapp-1.0-1.noarch" weakapp --exclude=weakdep
+  expect_lock "a Recommends that is requested too stays" \
+    "weakapp-1.0-1.noarch weakdep-1.0-1.noarch" weakapp weakdep --exclude=weakdep
+}
+
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.
-SECTIONS=(best excludepkgs modules basearch duprepos)
+SECTIONS=(best excludepkgs modules basearch duprepos weakdeps)
 if [ -n "${TEST_SHARD_STATUS_FILE:-}" ]; then touch "${TEST_SHARD_STATUS_FILE}"; fi
 for i in "${!SECTIONS[@]}"; do
   if [ $((i % ${TEST_TOTAL_SHARDS:-1})) -eq "${TEST_SHARD_INDEX:-0}" ]; then

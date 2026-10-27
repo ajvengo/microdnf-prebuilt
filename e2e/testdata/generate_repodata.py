@@ -162,7 +162,7 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 """
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
-# (forcearch, excludepkgs, modules, best/nobest).
+# (forcearch, excludepkgs, modules, best/nobest, weak dependencies).
 # Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
@@ -179,7 +179,13 @@ FEATURE_PACKAGES = [
     # --module-enable: non-modular mysql 8.0 and the modular mysql:8.4 stream.
     ("mysql", 0, "8.0.44", "1.el9", "x86_64", []),
     ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", []),
+    # weak dependencies: weakapp Recommends weakdep, which nothing requires.
+    ("weakapp", 0, "1.0", "1", "noarch", []),
+    ("weakdep", 0, "1.0", "1", "noarch", []),
 ]
+
+# Recommends of FEATURE_PACKAGES, by package name.
+FEATURE_RECOMMENDS = {"weakapp": ["weakdep"]}
 
 FEATURE_MODULES_YAML = b"""---
 document: modulemd
@@ -251,6 +257,10 @@ def feature_repodata():
             primary.append("    <rpm:requires>")
             primary += [f'      <rpm:entry name="{dep}"/>' for dep in requires]
             primary.append("    </rpm:requires>")
+        if name in FEATURE_RECOMMENDS:
+            primary.append("    <rpm:recommends>")
+            primary += [f'      <rpm:entry name="{dep}"/>' for dep in FEATURE_RECOMMENDS[name]]
+            primary.append("    </rpm:recommends>")
         primary += ["  </format>", "</package>"]
         stubs += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
 

@@ -364,6 +364,47 @@ pick_one_pkg_per_name_arch (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
   return out;
 }
 
+/* Records the weak-dependency edges of @pkg_name in @edges (name -> set of names):
+ * from the packages its @deps (Recommends) name to it, or with @reverse
+ * (Supplements) from them to it, limited to the packages of the solve. */
+static void
+collect_weak_edges (HyQuery dep_query, DnfReldepList *deps, GHashTable *id_to_pkg,
+                    const char *pkg_name, gboolean reverse, GHashTable *edges)
+{
+  if (!deps)
+    return;
+
+  int n_deps = dnf_reldep_list_count (deps);
+  for (int d = 0; d < n_deps; ++d)
+    {
+      DnfReldep *reldep = dnf_reldep_list_index (deps, d);
+      hy_query_filter_reldep (dep_query, HY_PKG_PROVIDES, reldep);
+      g_autoptr(GPtrArray) providers = hy_query_run (dep_query);
+      hy_query_clear (dep_query);
+      dnf_reldep_free (reldep);
+
+      for (guint p = 0; p < providers->len; ++p)
+        {
+          DnfPackage *prov = g_ptr_array_index (providers, p);
+          const char *prov_name = dnf_package_get_name (prov);
+          if (!prov_name || g_strcmp0 (prov_name, pkg_name) == 0 ||
+              !g_hash_table_contains (id_to_pkg, GUINT_TO_POINTER (dnf_package_get_id (prov))))
+            continue;
+
+          const char *from = reverse ? prov_name : pkg_name;
+          const char *to = reverse ? pkg_name : prov_name;
+          GHashTable *set = g_hash_table_lookup (edges, from);
+          if (!set)
+            {
+              set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+              g_hash_table_insert (edges, g_strdup (from), set);
+            }
+          g_hash_table_add (set, g_strdup (to));
+        }
+    }
+  dnf_reldep_list_free (deps);
+}
+
 /* Candidates of the specs in @pkgs_spec: just the newest per arch with @latest,
  * every version otherwise (for --nobest). */
 static HyQuery
@@ -810,6 +851,10 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   g_autoptr(GPtrArray) all_pkgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
   g_autoptr(GPtrArray) obsoleted = NULL;
 
+  /* dnf's install_weak_deps (default True): the solver installs the Recommends
+   * of what it installs, and the Supplements that match */
+  const gboolean weak_deps = dnf_context_get_install_weak_deps ();
+
   if (target_pkgs->len > 0)
     {
       HyGoal goal = hy_goal_create (sack);
@@ -844,7 +889,13 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
             }
         }
 
-      if (hy_goal_run_flags (goal, use_best ? DNF_FORCE_BEST : DNF_NONE) != 0)
+      int run_flags = DNF_NONE;
+      if (use_best)
+        run_flags |= DNF_FORCE_BEST;
+      if (!weak_deps)
+        run_flags |= DNF_IGNORE_WEAK_DEPS;
+
+      if (hy_goal_run_flags (goal, (DnfGoalActions)run_flags) != 0)
         {
           g_autofree gchar *problems = lock_goal_describe_problems (goal);
           g_set_error (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
@@ -945,6 +996,14 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
         }
     }
 
+  /* Without --exclude every package the solver installs is kept, as dnf installs
+   * it. With it, what is only reachable through an excluded package is trimmed. */
+  const gboolean trim = g_hash_table_size (exclude_set) > 0;
+
+  /* Weak edges (Recommends, reverse Supplements), only followed to find what to
+   * trim; they stay out of "dependencies" as the package does not require them. */
+  g_autoptr(GHashTable) pkg_weak_deps = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_hash_table_unref);
+
   /* Discover direct dependencies of each resolved package */
   hy_autoquery HyQuery dep_query = hy_query_create (sack);
   g_autoptr(GHashTable) pkg_direct_deps = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_hash_table_unref);
@@ -1000,6 +1059,14 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
       g_hash_table_insert (pkg_direct_deps, g_strdup (pkg_name), dep_names);
       g_hash_table_insert (pkg_direct_nevras, g_strdup (pkg_name), dep_nevras);
+
+      if (trim && weak_deps)
+        {
+          collect_weak_edges (dep_query, dnf_package_get_recommends (pkg), id_to_pkg,
+                              pkg_name, FALSE, pkg_weak_deps);
+          collect_weak_edges (dep_query, dnf_package_get_supplements (pkg), id_to_pkg,
+                              pkg_name, TRUE, pkg_weak_deps);
+        }
     }
 
   /* Excluded packages: those in exclude_set UNLESS directly requested */
@@ -1032,7 +1099,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     }
 
   /* If directly requested packages are all already installed, keep new packages reachable */
-  if (!any_in_reachable)
+  if (!trim || !any_in_reachable)
     {
       for (guint i = 0; i < resolved->len; ++i)
         {
@@ -1050,12 +1117,17 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   while (!g_queue_is_empty (queue))
     {
       gchar *curr = g_queue_pop_head (queue);
-      GHashTable *curr_deps = g_hash_table_lookup (pkg_direct_deps, curr);
-      if (curr_deps)
+      GHashTable *edge_sets[] = {
+        g_hash_table_lookup (pkg_direct_deps, curr),
+        g_hash_table_lookup (pkg_weak_deps, curr),
+      };
+      for (guint e = 0; e < G_N_ELEMENTS (edge_sets); ++e)
         {
+          if (!edge_sets[e])
+            continue;
           GHashTableIter dep_it;
           gpointer dep_k;
-          g_hash_table_iter_init (&dep_it, curr_deps);
+          g_hash_table_iter_init (&dep_it, edge_sets[e]);
           while (g_hash_table_iter_next (&dep_it, &dep_k, NULL))
             {
               const char *dep_name = dep_k;
