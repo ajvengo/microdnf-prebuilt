@@ -164,7 +164,7 @@ main (int argc, char *argv[])
           g_autoptr(GOptionContext) help_ctx = g_option_context_new ("[OPTIONS...] <PACKAGE...>");
           g_autoptr(GOptionGroup) help_global_group = g_option_group_new ("global", "Global Options:", "Show global options", ctx, NULL);
           g_option_group_add_entries (help_global_group, global_opts);
-          g_option_context_add_group (help_ctx, help_global_group);
+          g_option_context_add_group (help_ctx, g_steal_pointer (&help_global_group));
           const GOptionEntry entries[] = {
             { "installroot", '\0', 0, G_OPTION_ARG_FILENAME, NULL, "Root directory for rpmdb installation", "PATH" },
             { "dbpath", '\0', 0, G_OPTION_ARG_FILENAME, NULL, "Path to rpm database (default: /var/lib/rpm)", "PATH" },
@@ -184,7 +184,7 @@ main (int argc, char *argv[])
   g_autoptr(GOptionContext) global_opt_ctx = g_option_context_new (NULL);
   g_autoptr(GOptionGroup) global_group = g_option_group_new ("global", "Global Options:", "Show global options", ctx, NULL);
   g_option_group_add_entries (global_group, global_opts);
-  g_option_context_set_main_group (global_opt_ctx, global_group);
+  g_option_context_set_main_group (global_opt_ctx, g_steal_pointer (&global_group));
   g_option_context_set_ignore_unknown_options (global_opt_ctx, TRUE);
   g_option_context_set_help_enabled (global_opt_ctx, FALSE);
 
@@ -221,7 +221,7 @@ main (int argc, char *argv[])
   g_autoptr(GOptionContext) subcmd_opt_ctx = g_option_context_new ("[OPTIONS...] <PACKAGE...>");
   g_autoptr(GOptionGroup) subcmd_global_group = g_option_group_new ("global", "Global Options:", "Show global options", ctx, NULL);
   g_option_group_add_entries (subcmd_global_group, global_opts);
-  g_option_context_add_group (subcmd_opt_ctx, subcmd_global_group);
+  g_option_context_add_group (subcmd_opt_ctx, g_steal_pointer (&subcmd_global_group));
 
   if (!run_mark (argc, argv, subcmd_opt_ctx, ctx, &error))
     {
