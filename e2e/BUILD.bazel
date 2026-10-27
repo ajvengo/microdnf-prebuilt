@@ -125,7 +125,7 @@ sh_test(
     ],
 )
 
-# dnf_lock options: --excludepkgs, --module-enable, --best/--nobest, --forcearch
+# dnf_lock options: --excludepkgs, --module-enable, --best/--nobest, --forcearch, duplicate repos
 sh_test(
     name = "lock_features_test",
     srcs = ["test_lock_features.sh"],
@@ -139,7 +139,7 @@ sh_test(
         "//e2e/testdata:features_repo_files",
     ],
     # One section per shard (see SECTIONS in the script).
-    shard_count = 4,
+    shard_count = 5,
 )
 
 # The same options through the rpm_lock attributes
