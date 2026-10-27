@@ -141,7 +141,7 @@ for CASE, repo, entry, want in [
         ("a layer entry with an empty integrity at the same NEVRA is unchanged", APP1,
          {**NO_INTEGRITY, "integrity": ""}, ["extra-1-1.noarch"]),
         ("a layer entry without integrity at another NEVRA is replaced", APP12, NO_INTEGRITY,
-         ["app-2-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"]),
+         ["app-2-1.noarch", "extra-1-1.noarch"]),
         ("a layer entry with another integrity counts as changed", APP1,
          {**NO_INTEGRITY, "integrity": "sha256-AAAA"}, ["app-1-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"])]:
     rc, nevras, err, obsoleted = lock(CASE, repo, [entry], ["app", "extra"])
@@ -155,6 +155,15 @@ for CASE, below_ver in [("a layer package newer than the repositories gets no we
     below = {k: v for k, v in locked("pkg", below_ver).items() if k != "integrity"}
     rc, nevras, err, obsoleted = lock(CASE, PKG1, [below], ["pkg", "extra"])
     check(CASE, (rc, nevras), (0, ["extra-1-1.noarch"]), err)
+
+# An upgrade adds only the weak dependencies that are new: the Recommends the layer's build of the package
+# already made (and left unmet) stay out, as in `dnf update`. Known only when the repositories hold that build.
+CASE = "an upgrade skips the Recommends the layer's build left unmet"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "pkg", "ver": "1", "recommends": ["rec"]},
+                                         {"name": "pkg", "ver": "2", "recommends": ["rec", "rec2"]},
+                                         {"name": "rec"}, {"name": "rec2"}],
+                                  [{k: v for k, v in locked("pkg", "1").items() if k != "integrity"}], ["pkg"])
+check(CASE, (rc, nevras), (0, ["pkg-2-1.noarch", "rec2-1-1.noarch"]), err)
 
 # dnf installs the Recommends of what it installs (install_weak_deps=True), unless a layer below has them.
 CASE = "a Recommends missing below is locked with its package"
