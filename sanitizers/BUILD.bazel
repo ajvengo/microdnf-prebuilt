@@ -8,5 +8,8 @@ config_setting(
 
 filegroup(
     name = "suppressions",
-    srcs = ["ubsan.supp"],
+    srcs = [
+        "lsan.supp",
+        "ubsan.supp",
+    ],
 )
