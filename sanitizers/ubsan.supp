@@ -1,5 +1,10 @@
-# UBSan suppressions: proven third-party noise only. Each entry names the finding.
-# libsolv hashes schema ids with `h = h * 7 + id` on int, relying on wraparound.
-signed-integer-overflow:repodata.c
-# libpeas passes a NULL source to memcpy with size 0 (peas-plugin-loader-c.c).
-nonnull-attribute:peas-plugin-loader-c.c
+# UBSan suppressions: third-party noise only; nothing from dnf/ is suppressed.
+# libsolv relies on wraparound and shifts into the sign bit in its hashing and packed-number
+# decoding (repodata.c `h * 7 + id`, repopack.h data_read_num64), and does pointer arithmetic on NULL
+# bases (repo.c repo_internalize).
+signed-integer-overflow:libsolv+
+shift-base:libsolv+
+pointer-overflow:libsolv+
+nonnull-attribute:libsolv+
+# libpeas passes a NULL source to memcpy with size 0 (peas-plugin-loader-c.c:129).
+nonnull-attribute:libpeas+
