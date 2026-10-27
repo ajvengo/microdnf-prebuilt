@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The rpm_lock attribute forcearch reaches dnf_lock: the lockfile resolves
-# x86_64 packages regardless of the host's architecture.
+# rpm_lock attributes excludepkgs and forcearch reach dnf_lock: each lockfile
+# resolves differently from the defaults.
 set -euo pipefail
 
 python3 -c '
@@ -16,5 +16,7 @@ def check(path, expected, what):
     assert got == expected, f"{what}: expected {expected}, got {got}"
     print(f"ok: {what}")
 
-check(sys.argv[1], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
+check(sys.argv[1], ["ca-certificates-2025.2.80_v9.0.305-1.el9.noarch", "certuser-1.0-1.noarch"],
+      "excludepkgs hides the newer ca-certificates")
+check(sys.argv[2], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
 ' "$@"

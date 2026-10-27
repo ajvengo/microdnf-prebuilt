@@ -72,8 +72,10 @@ process_global_option (const gchar  *option_name,
               g_auto(GStrv) varsdir = g_strsplit (setopt[1], ",", -1);
               dnf_context_set_vars_dir (ctx, (const gchar * const *)varsdir);
             }
-          else if (strchr (setopt[0], '.'))
+          else
             {
+              /* Main options (excludepkgs) and repo_id.option_name
+               * options, applied when libdnf loads its config. */
               dnf_conf_add_setopt (setopt[0], DNF_CONF_COMMANDLINE, setopt[1], NULL);
             }
         }
@@ -196,7 +198,9 @@ main (int argc, char *argv[])
     { "refresh", '\0', 0, G_OPTION_ARG_NONE, &opt_refresh, "Set metadata as expired", NULL },
     { "releasever", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option, "Override $releasever", "RELEASEVER" },
     { "reposdir", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option, "Override repository configuration directory", "PATH" },
-    { "setopt", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option, "Override configuration option", "<opt>=<val>" },
+    { "setopt", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option,
+      "Override a configuration option (excludepkgs=<glob>,..., "
+      "cachedir=<path>, reposdir=<path>,..., varsdir=<path>,..., repo_id.option_name=<value>)", "<opt>=<val>" },
     { NULL }
   };
 
@@ -219,6 +223,7 @@ main (int argc, char *argv[])
             { "archlist", '\0', 0, G_OPTION_ARG_NONE, NULL, "Limit query to packages of given architectures", "ARCH,..." },
             { "forcearch", '\0', 0, G_OPTION_ARG_NONE, NULL, "Solve for this architecture instead of the host's (default: first non-noarch --archlist entry)", "ARCH" },
             { "exclude", 'x', 0, G_OPTION_ARG_NONE, NULL, "Exclude package and its dependencies unless directly requested", "PKG,..." },
+            { "excludepkgs", '\0', 0, G_OPTION_ARG_NONE, NULL, "Hide packages matching NEVRA globs from the solver, like dnf --exclude/excludepkgs=", "GLOB,..." },
             { "lockfile", 'l', 0, G_OPTION_ARG_NONE, NULL, "Ordered list of lockfiles from previous layers", "FILE" },
             { "lock-file", 0, 0, G_OPTION_ARG_NONE, NULL, "Ordered list of lockfiles from previous layers", "FILE" },
             { NULL }
