@@ -4,6 +4,12 @@ load("//microdnf:defs.bzl", "rpm_archive", "rpm_extract", "rpm_lock")
 
 package(default_visibility = ["//visibility:public"])
 
+# UBSan suppression file, present in the runfiles only under --config=asan.
+_SANITIZER_DATA = select({
+    "//sanitizers:enabled": ["//sanitizers:suppressions"],
+    "//conditions:default": [],
+})
+
 # Direct execution test for built tools
 sh_test(
     name = "test_tools_test",
@@ -19,7 +25,7 @@ sh_test(
         "//:microdnf",
         "//:rpm2archive",
         "//:rpm2files",
-    ],
+    ] + _SANITIZER_DATA,
 )
 
 # Step 2 test: Lockfile generation with RPM exclusion
@@ -338,7 +344,7 @@ sh_test(
         "//e2e/testdata:repo/repodata/repomd.xml",
         "//e2e/testdata:test.repo",
         "//e2e/testdata:test_repo_files",
-    ],
+    ] + _SANITIZER_DATA,
 )
 
 sh_test(
@@ -351,7 +357,7 @@ sh_test(
     data = [
         ":test_lock_layers.py",
         "//:dnf_lock",
-    ],
+    ] + _SANITIZER_DATA,
 )
 
 test_suite(

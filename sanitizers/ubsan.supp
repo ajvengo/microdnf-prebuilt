@@ -1,0 +1,5 @@
+# UBSan suppressions: proven third-party noise only. Each entry names the finding.
+# libsolv hashes schema ids with `h = h * 7 + id` on int, relying on wraparound.
+signed-integer-overflow:repodata.c
+# libpeas passes a NULL source to memcpy with size 0 (peas-plugin-loader-c.c).
+nonnull-attribute:peas-plugin-loader-c.c
