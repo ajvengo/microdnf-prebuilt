@@ -56,7 +56,7 @@ select_one_pkg_for_nevra (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
                            g_slist_prepend (g_hash_table_lookup (nevra2pkgs, pkg_nevra), pkg));
     }
 
-  GPtrArray *pkgs_to_use = g_ptr_array_sized_new (g_hash_table_size (nevra2pkgs));
+  GPtrArray *pkgs_to_use = g_ptr_array_new_full (g_hash_table_size (nevra2pkgs), g_object_unref);
   GHashTableIter iter;
   GSList *pkgs_list;
   g_hash_table_iter_init (&iter, nevra2pkgs);
