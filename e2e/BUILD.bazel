@@ -146,7 +146,7 @@ sh_test(
         "//:dnf_lock",
         "//e2e/testdata:features-repo/repodata/repomd.xml",
         "//e2e/testdata:features_repo_files",
-    ],
+    ] + _SANITIZER_DATA,
     # One section per shard (see SECTIONS in the script).
     shard_count = 6,
 )
@@ -502,5 +502,5 @@ sh_test(
         "//:mark",
         "//e2e/testdata:ol9_repo/ol9.repo",
         "//e2e/testdata:ol9_repo_files",
-    ],
+    ] + _SANITIZER_DATA,
 )
