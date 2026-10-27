@@ -13,6 +13,7 @@
 #include <glib.h>
 #include <json-c/json.h>
 #include <librepo/librepo.h>
+#include <solv/evr.h>
 #include <solv/pool.h>
 #include <solv/repo.h>
 #include <solv/solvable.h>
@@ -923,7 +924,20 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       if (use_best)
         {
           for (guint i = 0; i < target_pkgs->len; ++i)
-            hy_goal_install (goal, g_ptr_array_index (target_pkgs, i));
+            {
+              DnfPackage *pkg = g_ptr_array_index (target_pkgs, i);
+              /* dnf leaves an installed package alone unless the repositories hold a newer
+               * build: an install job for an older or identical copy of it would count as a
+               * fresh install and pull in that copy's weak dependencies. */
+              InstalledPkg *inst = lookup_installed (installed_by_key, pkg, installonly);
+              if (inst && inst->version)
+                {
+                  int cmp = pool_evrcmp_str (pool, inst->version, dnf_package_get_evr (pkg), EVRCMP_COMPARE);
+                  if (cmp > 0 || (cmp == 0 && !layer_integrity_differs (inst->integrity, pkg)))
+                    continue;
+                }
+              hy_goal_install (goal, pkg);
+            }
         }
       else
         {
