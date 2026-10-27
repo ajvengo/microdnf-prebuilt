@@ -74,8 +74,8 @@ test:ci --test_output=errors
 test:ci --test_summary=terse
 
 # AddressSanitizer + LeakSanitizer probe (dnf_lock e2e). Applies to every C dep built from source.
-build:asan --features=asan
-build:asan --features=ubsan
+build:asan --@llvm//config:asan=true
+build:asan --@llvm//config:ubsan=true
 build:asan --copt=-fno-sanitize-recover=undefined
 build:asan --copt=-fno-omit-frame-pointer
 build:asan --copt=-g1
