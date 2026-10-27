@@ -134,6 +134,9 @@ it is still going, or after it was killed.
     ```
     This ensures only the 12 needed release binaries are downloaded to the runner while intermediate build artifacts stay in the remote CAS.
 
+### Sanitizers
+- `bazel test --config=asan <e2e lock tests>` runs ASan + LSan + UBSan (see README). Fix findings in `dnf/`; third-party noise goes into `sanitizers/*.supp` with a reason.
+
 ---
 
 ## 5. Renovate & RE2 Regular Expressions

@@ -68,6 +68,21 @@ bazel build //:microdnf //:rpm2archive //:dnf_lock
 bazel build //:microdnf_all //:rpm2archive_all //:dnf_lock_all
 ```
 
+## Sanitizers
+
+`--config=asan` builds `dnf_lock` and every C dependency from source with AddressSanitizer, LeakSanitizer and
+UndefinedBehaviorSanitizer (the hermetic LLVM toolchain's `@llvm//config:asan` and `@llvm//config:ubsan` flags;
+UBSan aborts on the first finding). It is Linux-only and sets `ASAN_OPTIONS`, `LSAN_OPTIONS` and `UBSAN_OPTIONS`
+for tests, so no manual steps are needed:
+
+```bash
+bazel test --config=asan //e2e:lock_direct_test //e2e:lock_layers_test //e2e:test_tools_test
+```
+
+Known third-party noise is suppressed in [`sanitizers/ubsan.supp`](sanitizers/ubsan.supp) and
+[`sanitizers/lsan.supp`](sanitizers/lsan.supp); both ship to the tests as data only under this config. Add an
+entry there, with a reason, rather than weakening the options. The `Sanitizers` workflow runs exactly this on every pull request and push to `main`.
+
 ## License
 
 This project is licensed under the [Apache License, Version 2.0](LICENSE).
