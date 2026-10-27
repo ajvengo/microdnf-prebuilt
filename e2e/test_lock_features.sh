@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dnf_lock option tests against the synthetic "features" repository:
-# --excludepkgs and --forcearch.
+# --excludepkgs, --module-enable and --forcearch.
 set -euo pipefail
 
 DNF_LOCK="$1"
@@ -24,6 +24,7 @@ ARCHLIST=x86_64,noarch
 CA_OLD="ca-certificates-2025.2.80_v9.0.305-1.el9.noarch certuser-1.0-1.noarch"
 CA_NEW="ca-certificates-2026.2.92_v9.0.319-1.el9.noarch certuser-1.0-1.noarch"
 EXPAT_OLD="expat-2.7.2-1.el10.x86_64"
+MYSQL_MODULAR="mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"
 
 FAILURES=0
 OUT="${WORK}/out.json"
@@ -100,6 +101,20 @@ section_excludepkgs() {
     expat --excludepkgs='expat-*'
 }
 
+section_modules() {
+  echo "--- modules (mysql:8.4 is modular, mysql 8.0 is not)"
+  expect_lock "modular packages are hidden by default" "mysql-8.0.44-1.el9.x86_64" \
+    mysql --setopt=module_platform_id=platform:el9
+  expect_lock "--module-enable exposes the stream" \
+    "${MYSQL_MODULAR}" \
+    mysql --module-enable=mysql:8.4 --setopt=module_platform_id=platform:el9
+  expect_lock "--module-enable repeated and comma-separated is deduplicated" \
+    "${MYSQL_MODULAR}" \
+    mysql --module-enable=mysql:8.4,mysql:8.4 --module-enable=mysql:8.4 --setopt=module_platform_id=platform:el9
+  expect_error "--module-enable of an unknown stream fails" "mysql:9.9" \
+    mysql --module-enable=mysql:9.9 --setopt=module_platform_id=platform:el9
+}
+
 section_basearch() {
   echo "--- --forcearch / --archlist solve architecture and \$basearch"
   # A repo whose baseurl holds $basearch, served from a directory named after an
@@ -127,7 +142,7 @@ REPO
 }
 
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.
-SECTIONS=(excludepkgs basearch)
+SECTIONS=(excludepkgs modules basearch)
 if [ -n "${TEST_SHARD_STATUS_FILE:-}" ]; then touch "${TEST_SHARD_STATUS_FILE}"; fi
 for i in "${!SECTIONS[@]}"; do
   if [ $((i % ${TEST_TOTAL_SHARDS:-1})) -eq "${TEST_SHARD_INDEX:-0}" ]; then

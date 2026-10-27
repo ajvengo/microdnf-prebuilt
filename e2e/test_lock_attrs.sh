@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# rpm_lock attributes excludepkgs and forcearch reach dnf_lock: each lockfile
-# resolves differently from the defaults.
+# rpm_lock attributes excludepkgs, module_enable, module_platform_id and forcearch
+# reach dnf_lock: each lockfile resolves differently from the defaults.
 set -euo pipefail
 
 python3 -c '
@@ -18,5 +18,7 @@ def check(path, expected, what):
 
 check(sys.argv[1], ["ca-certificates-2025.2.80_v9.0.305-1.el9.noarch", "certuser-1.0-1.noarch"],
       "excludepkgs hides the newer ca-certificates")
-check(sys.argv[2], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
+check(sys.argv[2], ["mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"],
+      "module_enable and module_platform_id expose the mysql:8.4 stream")
+check(sys.argv[3], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
 ' "$@"
