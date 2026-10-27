@@ -38,3 +38,12 @@ jobs:
         run: >-
           bazel test --config=ci --config=asan
           //e2e:lock_direct_test //e2e:lock_layers_test //e2e:test_tools_test
+
+      - name: Confirm the binary is really instrumented
+        run: |
+          bazel build --config=ci --config=asan --remote_download_outputs=toplevel //:dnf_lock
+          bin="$(bazel info --config=ci --config=asan bazel-bin)/dnf/dnf_lock"
+          ls -l "$bin"
+          nm "$bin" 2>/dev/null | grep -c __asan_ || true
+          nm "$bin" 2>/dev/null | grep -c __lsan_ || true
+          ASAN_OPTIONS=verbosity=1:detect_leaks=1 "$bin" --help 2>&1 | head -30
