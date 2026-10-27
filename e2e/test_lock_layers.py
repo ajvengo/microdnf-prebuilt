@@ -38,7 +38,8 @@ def write_repo(root, pkgs):
     for p in pkgs:
         name, ver, arch = p["name"], p.get("ver", "1"), p.get("arch", "noarch")
         deps = (entries("provides", [(name, ver)] + p.get("provides", [])) +
-                entries("requires", p.get("requires", [])) + entries("obsoletes", p.get("obsoletes", [])))
+                entries("requires", p.get("requires", [])) + entries("obsoletes", p.get("obsoletes", [])) +
+                entries("recommends", p.get("recommends", [])))
         xml.append(f"""<package type="rpm"><name>{name}</name><arch>{arch}</arch>
 <version epoch="0" ver="{ver}" rel="1"/><checksum type="sha256" pkgid="YES">{pkgid(name, ver, arch)}</checksum>
 <summary>s</summary><description>d</description><packager/><url/><time file="1" build="1"/>
@@ -127,6 +128,17 @@ CASE = "obsoleting a package below records it and warns"
 rc, nevras, err, obsoleted = lock(CASE, [{"name": "old"}, {"name": "new", "obsoletes": ["old"]}], [locked("old")], ["new"])
 check(CASE, (rc, nevras, obsoleted, "the solve obsoletes old-1-1.noarch from a layer below" in err),
       (0, ["new-1-1.noarch"], [{"name": "old", "version": "1-1", "arch": "noarch", "nevra": "old-1-1.noarch"}], True), err)
+
+# dnf installs the Recommends of what it installs (install_weak_deps=True), unless a layer below has them.
+CASE = "a Recommends missing below is locked with its package"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "app", "recommends": ["extra"]}, {"name": "extra"}, {"name": "base"}],
+                                  [locked("base")], ["app"])
+check(CASE, (rc, nevras), (0, ["app-1-1.noarch", "extra-1-1.noarch"]), err)
+
+CASE = "a Recommends installed below is not locked again"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "app", "recommends": ["extra"]}, {"name": "extra"}],
+                                  [locked("extra")], ["app"])
+check(CASE, (rc, nevras), (0, ["app-1-1.noarch"]), err)
 
 for CASE, entry, message in [
         ("a lockfile entry without a name is an error",

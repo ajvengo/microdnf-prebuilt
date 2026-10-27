@@ -162,7 +162,7 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 """
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
-# (forcearch, excludepkgs, modules, best/nobest).
+# (forcearch, excludepkgs, modules, best/nobest, weak dependencies).
 # Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
@@ -179,7 +179,27 @@ FEATURE_PACKAGES = [
     # --module-enable: non-modular mysql 8.0 and the modular mysql:8.4 stream.
     ("mysql", 0, "8.0.44", "1.el9", "x86_64", []),
     ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", []),
+    # weak dependencies: weakapp Recommends weakdep, which nothing requires.
+    ("weakapp", 0, "1.0", "1", "noarch", []),
+    ("weakdep", 0, "1.0", "1", "noarch", []),
+    # Supplements: suppapp is pulled in only because suppbase is installed.
+    ("suppbase", 0, "1.0", "1", "noarch", []),
+    ("suppapp", 0, "1.0", "1", "noarch", []),
+    # Rich (boolean) weak dependencies, written as rpm:entry names like rpm does.
+    ("richapp", 0, "1.0", "1", "noarch", []),
+    ("richdep", 0, "1.0", "1", "noarch", []),
+    ("richtrigger", 0, "1.0", "1", "noarch", []),
+    ("richbase", 0, "1.0", "1", "noarch", []),
+    ("richsupp", 0, "1.0", "1", "noarch", []),
 ]
+
+# Weak dependencies of FEATURE_PACKAGES by package name and rpm:<tag>.
+FEATURE_WEAK = {
+    "weakapp": {"recommends": ["weakdep"]},
+    "suppapp": {"supplements": ["suppbase"]},
+    "richapp": {"recommends": ["(richdep if richtrigger)"]},
+    "richsupp": {"supplements": ["(richbase and richtrigger)"]},
+}
 
 FEATURE_MODULES_YAML = b"""---
 document: modulemd
@@ -251,6 +271,10 @@ def feature_repodata():
             primary.append("    <rpm:requires>")
             primary += [f'      <rpm:entry name="{dep}"/>' for dep in requires]
             primary.append("    </rpm:requires>")
+        for tag, deps in FEATURE_WEAK.get(name, {}).items():
+            primary.append(f"    <rpm:{tag}>")
+            primary += [f'      <rpm:entry name="{dep}"/>' for dep in deps]
+            primary.append(f"    </rpm:{tag}>")
         primary += ["  </format>", "</package>"]
         stubs += [f'<package pkgid="{pkgid}" name="{name}" arch="{arch}">', version, "</package>"]
 
