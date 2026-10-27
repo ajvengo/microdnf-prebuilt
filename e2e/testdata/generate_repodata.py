@@ -269,6 +269,7 @@ def feature_repodata():
 def compress(data):
     return gzip.compress(data, mtime=0)
 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--out-dir", required=True)
@@ -324,6 +325,7 @@ def main():
 """
     with open(os.path.join(args.out_dir, "repomd.xml"), "w", encoding="utf-8") as f:
         f.write(repomd)
+
 
 if __name__ == "__main__":
     main()
