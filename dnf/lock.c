@@ -474,6 +474,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   g_autofree gchar *opt_forcearch = NULL;
   g_auto(GStrv) opt_exclude = NULL;
   g_auto(GStrv) opt_excludepkgs = NULL;
+  g_auto(GStrv) opt_module_enable = NULL;
   g_auto(GStrv) opt_lockfiles = NULL;
   g_auto(GStrv) opt_packages = NULL;
 
@@ -483,6 +484,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     { "forcearch", '\0', 0, G_OPTION_ARG_STRING, &opt_forcearch, "Solve for this architecture instead of the host's (default: first non-noarch --archlist entry)", "ARCH" },
     { "exclude", 'x', 0, G_OPTION_ARG_STRING_ARRAY, &opt_exclude, "Exclude package and its unneeded dependencies unless directly requested", "PKG,..." },
     { "excludepkgs", '\0', 0, G_OPTION_ARG_STRING_ARRAY, &opt_excludepkgs, "Hide packages matching NEVRA globs from the solver, like dnf --exclude/excludepkgs=", "GLOB,..." },
+    { "module-enable", '\0', 0, G_OPTION_ARG_STRING_ARRAY, &opt_module_enable, "Enable module streams before resolving, like dnf module enable", "NAME:STREAM,..." },
     { "lockfile", 'l', 0, G_OPTION_ARG_FILENAME_ARRAY, &opt_lockfiles, "Ordered list of lockfiles from previous layers", "FILE" },
     { "lock-file", 0, 0, G_OPTION_ARG_FILENAME_ARRAY, &opt_lockfiles, "Ordered list of lockfiles from previous layers", "FILE" },
     { G_OPTION_REMAINING, 0, 0, G_OPTION_ARG_STRING_ARRAY, &opt_packages, "Target packages", "PACKAGE..." },
@@ -574,6 +576,16 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
   DnfSack *sack = dnf_context_get_sack (ctx);
   Pool *pool = dnf_sack_get_pool (sack);
+
+  g_auto(GStrv) module_specs = split_option_values (opt_module_enable);
+  if (module_specs[0])
+    {
+      if (!dnf_context_module_enable (ctx, (const char **)module_specs, error))
+        return FALSE;
+      /* libdnf enables the streams' module dependencies after filtering; refresh. */
+      if (!lock_recompute_modular_filtering (ctx, error))
+        return FALSE;
+    }
 
   /* Create and populate system repo representing packages installed in previous layers */
   if (installed_order->len > 0)

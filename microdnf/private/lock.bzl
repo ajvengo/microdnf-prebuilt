@@ -9,6 +9,10 @@ def _solver_args(ctx):
         args.append("--forcearch=" + ctx.attr.forcearch)
     for pattern in ctx.attr.excludepkgs:
         args.append("--excludepkgs=" + pattern)
+    for spec in ctx.attr.module_enable:
+        args.append("--module-enable=" + spec)
+    if ctx.attr.module_platform_id:
+        args.append("--setopt=module_platform_id=" + ctx.attr.module_platform_id)
     return args
 
 def _rpm_lock_impl(ctx):
@@ -204,6 +208,13 @@ rpm_lock = rule(
             executable = True,
             cfg = "exec",
             doc = "Underlying lock tool executable.",
+        ),
+        "module_enable": attr.string_list(
+            default = [],
+            doc = "Module streams to enable before resolving (NAME:STREAM), like dnf module enable.",
+        ),
+        "module_platform_id": attr.string(
+            doc = "Platform module (e.g. 'platform:el9') that module streams are resolved against.",
         ),
         "out": attr.output(
             mandatory = False,
