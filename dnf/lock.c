@@ -85,6 +85,48 @@ layer_integrity_differs (const gchar *layer_integrity, DnfPackage *pkg)
   return integrity && *integrity && g_strcmp0 (layer_integrity, integrity) != 0;
 }
 
+/* The layer holds @inst at a NEVRA the repositories lack, so its own provides are unknown.
+ * Give the synthetic solvable @new_id those of the repositories' newest build of the name:
+ * sonames and file paths rarely change between builds, and a solvable that provides only its
+ * name leaves the layer's other packages, whose requires come from the repositories, unsatisfied.
+ * The build's provides on the name itself (name, name = evr, name(arch) = evr) are its own and
+ * are skipped. */
+static void
+add_provides_of_name (Pool *pool, Repo *sys_repo, Id new_id, DnfSack *sack, const InstalledPkg *inst,
+                      const gchar *opt_archlist)
+{
+  hy_autoquery HyQuery q = hy_query_create (sack);
+  hy_query_filter (q, HY_PKG_REPONAME, HY_NEQ, HY_SYSTEM_REPO_NAME);
+  hy_query_filter (q, HY_PKG_NAME, HY_EQ, inst->name);
+  if (inst->arch)
+    hy_query_filter (q, HY_PKG_ARCH, HY_EQ, inst->arch);
+  else if (opt_archlist)
+    {
+      g_auto(GStrv) archs = g_strsplit_set (opt_archlist, ", ", -1);
+      hy_query_filter_in (q, HY_PKG_ARCH, HY_EQ, (const char **)archs);
+    }
+  hy_query_filter_num (q, HY_PKG_LATEST_PER_ARCH, HY_EQ, 1);
+  g_autoptr(GPtrArray) builds = hy_query_run (q);
+  if (!builds || builds->len == 0)
+    return;
+
+  Solvable *s_build = pool_id2solvable (pool, dnf_package_get_id (g_ptr_array_index (builds, 0)));
+  if (!s_build->provides)
+    return;
+  const char *name = pool_id2str (pool, s_build->name);
+  gsize name_len = strlen (name);
+  for (Id *dp = s_build->repo->idarraydata + s_build->provides; *dp; dp++)
+    {
+      Id base = *dp;
+      while (ISRELDEP (base))
+        base = GETRELDEP (pool, base)->name;
+      const char *base_str = pool_id2str (pool, base);
+      if (strncmp (base_str, name, name_len) == 0 && (base_str[name_len] == '\0' || base_str[name_len] == '('))
+        continue;
+      repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, *dp, 0);
+    }
+}
+
 static gchar *
 compute_package_integrity (DnfPackage *pkg)
 {
@@ -812,6 +854,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
               Id self_dep = pool_rel2id (pool, s_new->name, s_new->evr, REL_EQ, 1);
               repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, self_dep, 0);
               repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, s_new->name, 0);
+              add_provides_of_name (pool, sys_repo, new_id, sack, inst, opt_archlist);
 
               if (inst->dependencies)
                 {
