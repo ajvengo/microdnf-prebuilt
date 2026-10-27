@@ -327,6 +327,43 @@ select_one_pkg_for_nevra (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
   return pkgs_to_use;
 }
 
+/* The candidates of the specs, one per name.arch. Repos of equal priority each
+ * contribute their newest package, so the same NEVRA can appear once per repo
+ * (or an older and a newer one); installing every one of them fails with
+ * "cannot install both X from repoA and X from repoB". Keep the highest EVR and,
+ * for equal EVRs, the repo that wins on priority and cost. */
+static GPtrArray *
+pick_one_pkg_per_name_arch (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
+{
+  g_autoptr(GHashTable) best = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  for (guint i = 0; i < pkgs->len; ++i)
+    {
+      DnfPackage *pkg = g_ptr_array_index (pkgs, i);
+      g_autofree gchar *key = g_strdup_printf ("%s.%s", dnf_package_get_name (pkg),
+                                               dnf_package_get_arch (pkg));
+      DnfPackage *cur = g_hash_table_lookup (best, key);
+      if (!cur)
+        {
+          g_hash_table_insert (best, g_steal_pointer (&key), pkg);
+          continue;
+        }
+      gint cmp = dnf_package_evr_cmp (pkg, cur);
+      if (cmp > 0 || (cmp == 0 && dnf_package_repo_prio_cost_cmp (pkg, cur, repo_loader) < 0))
+        g_hash_table_insert (best, g_steal_pointer (&key), pkg);
+    }
+
+  GPtrArray *out = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+  for (guint i = 0; i < pkgs->len; ++i)
+    {
+      DnfPackage *pkg = g_ptr_array_index (pkgs, i);
+      g_autofree gchar *key = g_strdup_printf ("%s.%s", dnf_package_get_name (pkg),
+                                               dnf_package_get_arch (pkg));
+      if (g_hash_table_lookup (best, key) == pkg)
+        g_ptr_array_add (out, g_object_ref (pkg));
+    }
+  return out;
+}
+
 /* Candidates of the specs in @pkgs_spec: just the newest per arch with @latest,
  * every version otherwise (for --nobest). */
 static HyQuery
@@ -737,8 +774,10 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   for (guint i = 0; i < actual_target_pkgs->len; ++i)
     pkgs_spec_array[i] = g_strdup (g_ptr_array_index (actual_target_pkgs, i));
 
+  DnfRepoLoader *repo_loader = dnf_context_get_repo_loader (ctx);
   hy_autoquery HyQuery query = get_packages_query (ctx, pkgs_spec_array, opt_archlist, TRUE);
-  g_autoptr(GPtrArray) target_pkgs = hy_query_run (query);
+  g_autoptr(GPtrArray) candidate_pkgs = hy_query_run (query);
+  g_autoptr(GPtrArray) target_pkgs = pick_one_pkg_per_name_arch (repo_loader, candidate_pkgs);
 
   for (guint i = 0; i < target_pkgs->len; ++i)
     {
@@ -872,7 +911,6 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       hy_goal_free (goal);
     }
 
-  DnfRepoLoader *repo_loader = dnf_context_get_repo_loader (ctx);
   g_autoptr(GPtrArray) resolved = select_one_pkg_for_nevra (repo_loader, all_pkgs);
   g_ptr_array_set_free_func (resolved, g_object_unref);
 
