@@ -59,6 +59,7 @@ run_binary(
     ],
     outs = [
         "features-repo/repodata/filelists.xml.gz",
+        "features-repo/repodata/modules.yaml.gz",
         "features-repo/repodata/other.xml.gz",
         "features-repo/repodata/primary.xml.gz",
         "features-repo/repodata/repomd.xml",
