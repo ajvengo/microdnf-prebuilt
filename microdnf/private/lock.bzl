@@ -7,6 +7,8 @@ def _solver_args(ctx):
     args = []
     if ctx.attr.forcearch:
         args.append("--forcearch=" + ctx.attr.forcearch)
+    for pattern in ctx.attr.excludepkgs:
+        args.append("--excludepkgs=" + pattern)
     return args
 
 def _rpm_lock_impl(ctx):
@@ -184,6 +186,10 @@ rpm_lock = rule(
         "exclude": attr.string_list(
             default = [],
             doc = "Optional packages to exclude and prune from the dependency tree.",
+        ),
+        "excludepkgs": attr.string_list(
+            default = [],
+            doc = "NEVRA globs hidden from the solver, like dnf excludepkgs= (e.g. release cut-offs).",
         ),
         "forcearch": attr.string(
             doc = "Architecture to solve for instead of the host's (default: first non-noarch entry of arch).",

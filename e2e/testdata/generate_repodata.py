@@ -162,12 +162,16 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 """
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
-# (forcearch).
+# (forcearch, excludepkgs).
 # Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
     ("libfoo", 0, "2.0", "1", "noarch", []),
-    # --forcearch=x86_64: an x86_64 package must resolve on any host.
+    # --excludepkgs: release cut-off globs and full NEVRAs.
+    ("ca-certificates", 0, "2025.2.80_v9.0.305", "1.el9", "noarch", []),
+    ("ca-certificates", 0, "2026.2.92_v9.0.319", "1.el9", "noarch", []),
+    ("certuser", 0, "1.0", "1", "noarch", ["ca-certificates"]),
+    ("expat", 0, "2.7.2", "1.el10", "x86_64", []),
     ("expat", 0, "2.7.3", "1.el10_2.7", "x86_64", []),
 ]
 
