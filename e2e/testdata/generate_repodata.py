@@ -162,14 +162,53 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 """
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
-# (forcearch).
+# (forcearch, excludepkgs, modules, best/nobest).
 # Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
     ("libfoo", 0, "2.0", "1", "noarch", []),
-    # --forcearch=x86_64: an x86_64 package must resolve on any host.
+    # --excludepkgs: release cut-off globs and full NEVRAs.
+    ("ca-certificates", 0, "2025.2.80_v9.0.305", "1.el9", "noarch", []),
+    ("ca-certificates", 0, "2026.2.92_v9.0.319", "1.el9", "noarch", []),
+    ("certuser", 0, "1.0", "1", "noarch", ["ca-certificates"]),
+    ("expat", 0, "2.7.2", "1.el10", "x86_64", []),
     ("expat", 0, "2.7.3", "1.el10_2.7", "x86_64", []),
+    # best / nobest: the newest bestapp is not installable.
+    ("bestapp", 0, "1.0", "1", "noarch", []),
+    ("bestapp", 0, "2.0", "1", "noarch", ["missing-lib"]),
+    # --module-enable: non-modular mysql 8.0 and the modular mysql:8.4 stream.
+    ("mysql", 0, "8.0.44", "1.el9", "x86_64", []),
+    ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", []),
 ]
+
+FEATURE_MODULES_YAML = b"""---
+document: modulemd
+version: 2
+data:
+  name: mysql
+  stream: "8.4"
+  version: 9070020251010000000
+  context: e2e00084
+  arch: x86_64
+  summary: MySQL Module
+  description: MySQL 8.4 stream for the dnf_lock e2e tests.
+  license:
+    module:
+    - MIT
+  dependencies:
+  - buildrequires:
+      platform: [el9]
+    requires:
+      platform: [el9]
+  profiles:
+    server:
+      rpms:
+      - mysql
+  artifacts:
+    rpms:
+    - mysql-0:8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64
+...
+"""
 
 
 def _xml_doc(root, attrs, body):
@@ -245,6 +284,7 @@ def main():
             "primary.xml.gz": ("primary", primary_xml),
             "filelists.xml.gz": ("filelists", filelists_xml),
             "other.xml.gz": ("other", other_xml),
+            "modules.yaml.gz": ("modules", FEATURE_MODULES_YAML),
         }
     else:
         files = {

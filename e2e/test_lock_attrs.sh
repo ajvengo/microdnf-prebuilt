@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The rpm_lock attribute forcearch reaches dnf_lock: the lockfile resolves
-# x86_64 packages regardless of the host's architecture.
+# rpm_lock attributes excludepkgs, module_enable, module_platform_id, nobest and forcearch
+# reach dnf_lock: each lockfile resolves differently from the defaults.
 set -euo pipefail
 
 python3 -c '
@@ -16,5 +16,10 @@ def check(path, expected, what):
     assert got == expected, f"{what}: expected {expected}, got {got}"
     print(f"ok: {what}")
 
-check(sys.argv[1], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
+check(sys.argv[1], ["ca-certificates-2025.2.80_v9.0.305-1.el9.noarch", "certuser-1.0-1.noarch"],
+      "excludepkgs hides the newer ca-certificates")
+check(sys.argv[2], ["bestapp-1.0-1.noarch"], "nobest falls back to bestapp-1.0")
+check(sys.argv[3], ["mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"],
+      "module_enable and module_platform_id expose the mysql:8.4 stream")
+check(sys.argv[4], ["expat-2.7.3-1.el10_2.7.x86_64"], "forcearch solves for x86_64")
 ' "$@"
