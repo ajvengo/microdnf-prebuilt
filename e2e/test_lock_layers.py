@@ -131,15 +131,15 @@ check(CASE, (rc, nevras, obsoleted, "the solve obsoletes old-1-1.noarch from a l
 
 # A layer entry without integrity means "same build". The old code compared it with the repo's integrity
 # via g_strcmp0 (NULL vs "sha256-..." is nonzero), so a requested package installed at the same NEVRA was
-# locked again, and its Recommends with it. "extra" keeps the output non-empty.
+# locked again. "dep" (a Recommends of app, absent below) is new and still locked; "extra" is unrelated.
 APP1 = [{"name": "app", "ver": "1", "recommends": ["dep"]}, {"name": "dep"}, {"name": "extra"}]
 APP12 = [{"name": "app", "ver": "2", "recommends": ["dep"]}, *APP1]
 NO_INTEGRITY = {k: v for k, v in locked("app", "1").items() if k != "integrity"}
 for CASE, repo, entry, want in [
         ("a layer entry without integrity at the same NEVRA is unchanged", APP1, NO_INTEGRITY,
-         ["extra-1-1.noarch"]),
+         ["dep-1-1.noarch", "extra-1-1.noarch"]),
         ("a layer entry with an empty integrity at the same NEVRA is unchanged", APP1,
-         {**NO_INTEGRITY, "integrity": ""}, ["extra-1-1.noarch"]),
+         {**NO_INTEGRITY, "integrity": ""}, ["dep-1-1.noarch", "extra-1-1.noarch"]),
         ("a layer entry without integrity at another NEVRA is replaced", APP12, NO_INTEGRITY,
          ["app-2-1.noarch", "dep-1-1.noarch", "extra-1-1.noarch"]),
         ("a layer entry with another integrity counts as changed", APP1,
