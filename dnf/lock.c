@@ -5,6 +5,7 @@
 
 #include "lock.h"
 #include "lock-repo.h"
+#include "dnf-goal.h"
 #include "dnf-utils.h"
 
 #include <stdio.h>
@@ -84,6 +85,16 @@ layer_integrity_differs (const gchar *layer_integrity, DnfPackage *pkg)
     return FALSE;
   g_autofree gchar *integrity = compute_package_integrity (pkg);
   return integrity && *integrity && g_strcmp0 (layer_integrity, integrity) != 0;
+}
+
+/* Copies the dependency array @from_off of @from, under @keyname, onto @new_id. */
+static void
+copy_deparray (Repo *sys_repo, Id new_id, const Solvable *from, Id keyname, Offset from_off)
+{
+  if (!from_off)
+    return;
+  for (Id *dp = from->repo->idarraydata + from_off; *dp; dp++)
+    repo_add_deparray (sys_repo, new_id, keyname, *dp, 0);
 }
 
 /* The layer holds @inst at a NEVRA the repositories lack, so its own provides are unknown.
@@ -841,6 +852,9 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                       dp++;
                     }
                 }
+              /* dnf leaves out the providers of Recommends an installed package left unmet */
+              copy_deparray (sys_repo, new_id, s_cand, SOLVABLE_RECOMMENDS, s_cand->recommends);
+              copy_deparray (sys_repo, new_id, s_cand, SOLVABLE_SUPPLEMENTS, s_cand->supplements);
             }
           else
             {
@@ -971,7 +985,11 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       if (!weak_deps)
         run_flags |= DNF_IGNORE_WEAK_DEPS;
 
-      if (hy_goal_run_flags (goal, (DnfGoalActions)run_flags) != 0)
+      /* dnf_goal_depsolve, unlike hy_goal_run_flags, excludes from weak-dependency
+       * installation the providers of Recommends that the installed packages left
+       * unmet, so an upgrade only adds the weak dependencies that are new. */
+      g_autoptr(GError) depsolve_error = NULL;
+      if (!dnf_goal_depsolve (goal, (DnfGoalActions)run_flags, &depsolve_error))
         {
           g_autofree gchar *problems = lock_goal_describe_problems (goal);
           g_set_error (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
