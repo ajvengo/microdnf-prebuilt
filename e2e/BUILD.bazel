@@ -125,7 +125,7 @@ sh_test(
     ],
 )
 
-# dnf_lock options: --excludepkgs, --module-enable, --forcearch
+# dnf_lock options: --excludepkgs, --module-enable, --best/--nobest, --forcearch
 sh_test(
     name = "lock_features_test",
     srcs = ["test_lock_features.sh"],
@@ -139,7 +139,7 @@ sh_test(
         "//e2e/testdata:features_repo_files",
     ],
     # One section per shard (see SECTIONS in the script).
-    shard_count = 3,
+    shard_count = 4,
 )
 
 # The same options through the rpm_lock attributes
@@ -152,6 +152,20 @@ rpm_lock(
     excludepkgs = ["ca-certificates-2026.2.92_v9.0.319-*"],
     packages = ["certuser"],
     out = "attrs_excludepkgs.lock.json",
+    releasever = "9",
+    repo_config = "//e2e/testdata:features.repo",
+    repo_files = ["//e2e/testdata:features_repo_files"],
+)
+
+rpm_lock(
+    name = "attrs_nobest_lock",
+    arch = [
+        "x86_64",
+        "noarch",
+    ],
+    nobest = True,
+    packages = ["bestapp"],
+    out = "attrs_nobest.lock.json",
     releasever = "9",
     repo_config = "//e2e/testdata:features.repo",
     repo_files = ["//e2e/testdata:features_repo_files"],
@@ -191,6 +205,7 @@ sh_test(
     srcs = ["test_lock_attrs.sh"],
     args = [
         "$(location :attrs_excludepkgs.lock.json)",
+        "$(location :attrs_nobest.lock.json)",
         "$(location :attrs_module.lock.json)",
         "$(location :attrs_forcearch.lock.json)",
     ],
@@ -198,6 +213,7 @@ sh_test(
         ":attrs_excludepkgs.lock.json",
         ":attrs_forcearch.lock.json",
         ":attrs_module.lock.json",
+        ":attrs_nobest.lock.json",
     ],
 )
 

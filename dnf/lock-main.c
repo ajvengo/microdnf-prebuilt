@@ -78,7 +78,7 @@ process_global_option (const gchar  *option_name,
             }
           else
             {
-              /* Main options (excludepkgs, ...) and repo_id.option_name
+              /* Main options (excludepkgs, best, ...) and repo_id.option_name
                * options, applied when libdnf loads its config. */
               dnf_conf_add_setopt (setopt[0], DNF_CONF_COMMANDLINE, setopt[1], NULL);
             }
@@ -203,7 +203,7 @@ main (int argc, char *argv[])
     { "releasever", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option, "Override $releasever", "RELEASEVER" },
     { "reposdir", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option, "Override repository configuration directory", "PATH" },
     { "setopt", '\0', 0, G_OPTION_ARG_CALLBACK, process_global_option,
-      "Override a configuration option (excludepkgs=<glob>,..., module_platform_id=<name:stream>, "
+      "Override a configuration option (excludepkgs=<glob>,..., best=<bool>, module_platform_id=<name:stream>, "
       "cachedir=<path>, reposdir=<path>,..., varsdir=<path>,..., repo_id.option_name=<value>)", "<opt>=<val>" },
     { NULL }
   };
@@ -229,6 +229,8 @@ main (int argc, char *argv[])
             { "exclude", 'x', 0, G_OPTION_ARG_NONE, NULL, "Exclude package and its dependencies unless directly requested", "PKG,..." },
             { "excludepkgs", '\0', 0, G_OPTION_ARG_NONE, NULL, "Hide packages matching NEVRA globs from the solver, like dnf --exclude/excludepkgs=", "GLOB,..." },
             { "module-enable", '\0', 0, G_OPTION_ARG_NONE, NULL, "Enable module streams before resolving, like dnf module enable", "NAME:STREAM,..." },
+            { "best", '\0', 0, G_OPTION_ARG_NONE, NULL, "Require the best candidate for requested packages (default)", NULL },
+            { "nobest", '\0', 0, G_OPTION_ARG_NONE, NULL, "Fall back to older candidates when the best one is not installable", NULL },
             { "lockfile", 'l', 0, G_OPTION_ARG_NONE, NULL, "Ordered list of lockfiles from previous layers", "FILE" },
             { "lock-file", 0, 0, G_OPTION_ARG_NONE, NULL, "Ordered list of lockfiles from previous layers", "FILE" },
             { NULL }

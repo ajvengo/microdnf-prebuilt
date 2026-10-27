@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dnf_lock option tests against the synthetic "features" repository:
-# --excludepkgs, --module-enable and --forcearch.
+# --excludepkgs, --module-enable, --best/--nobest and --forcearch.
 set -euo pipefail
 
 DNF_LOCK="$1"
@@ -77,6 +77,21 @@ expect_error() {
   fi
 }
 
+section_best() {
+  echo "--- best / nobest"
+  expect_error "best (default) fails when the newest candidate is broken" \
+    "nothing provides missing-lib needed by bestapp-2.0-1.noarch" bestapp
+  expect_error "--best is explicit default" "missing-lib" bestapp --best
+  expect_lock "--nobest falls back to an older candidate" "bestapp-1.0-1.noarch" bestapp --nobest
+  expect_lock "--setopt=best=False falls back too" "bestapp-1.0-1.noarch" bestapp --setopt=best=False
+  expect_error "--nobest keeps a pinned version (no fallback to bestapp-1.0)" \
+    "missing-lib" bestapp-2.0-1.noarch --nobest
+  expect_error "--best and --nobest conflict" "Argument --nobest is not allowed with argument --best" \
+    bestapp --best --nobest
+  expect_lock "--nobest still takes the newest installable candidate" \
+    "${CA_NEW}" certuser --nobest
+}
+
 section_excludepkgs() {
   echo "--- excludepkgs"
   expect_lock "solver sees the newest ca-certificates by default" \
@@ -142,7 +157,7 @@ REPO
 }
 
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.
-SECTIONS=(excludepkgs modules basearch)
+SECTIONS=(best excludepkgs modules basearch)
 if [ -n "${TEST_SHARD_STATUS_FILE:-}" ]; then touch "${TEST_SHARD_STATUS_FILE}"; fi
 for i in "${!SECTIONS[@]}"; do
   if [ $((i % ${TEST_TOTAL_SHARDS:-1})) -eq "${TEST_SHARD_INDEX:-0}" ]; then

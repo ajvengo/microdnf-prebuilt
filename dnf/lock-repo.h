@@ -28,4 +28,8 @@ void lock_sack_repos_changed (DnfSack *sack);
  * container, without reloading module state from disk. */
 gboolean lock_recompute_modular_filtering (DnfContext *ctx, GError **error);
 
+/* Returns a newly allocated, human readable description of the solver problems
+ * of a failed @goal. */
+gchar *lock_goal_describe_problems (HyGoal goal);
+
 G_END_DECLS
