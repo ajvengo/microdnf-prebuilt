@@ -8,6 +8,9 @@ exports_files([
     "changed_integrity.lock.json",
     "features.repo",
     "generate_repodata.py",
+    "ol9_repo/curl-7.76.1-40.el9_8.8.x86_64.rpm",
+    "ol9_repo/libcurl-7.76.1-40.el9_8.8.x86_64.rpm",
+    "ol9_repo/ol9.repo",
     "test.repo",
     "x86_64.lock.json",
 ])
@@ -69,4 +72,9 @@ run_binary(
 filegroup(
     name = "features_repo_files",
     srcs = [":generate_features_repodata"],
+)
+
+filegroup(
+    name = "ol9_repo_files",
+    srcs = glob(["ol9_repo/**"]),
 )
