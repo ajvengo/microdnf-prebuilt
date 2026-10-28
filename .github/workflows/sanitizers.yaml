@@ -5,13 +5,13 @@ name: Sanitizers
 on:
   push:
     branches: [main, probe/asan-dnf-lock]
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 concurrency:
   group: sanitizers-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   BUILDBUDDY_ENDPOINT: ${{ vars.BUILDBUDDY_ENDPOINT || 'manuelfrancisconaranjo.buildbuddy.io' }}
@@ -20,14 +20,12 @@ jobs:
   sanitizers:
     runs-on: ubuntu-latest
     # Pull requests wait for maintainer approval exactly like ci.yaml (secrets are exposed).
-    environment: ${{ github.event_name == 'pull_request_target' && 'pr-secrets' || '' }}
+    environment: ${{ github.event_name == 'pull_request' && 'pr-secrets' || '' }}
     permissions:
       contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event_name == 'pull_request_target' && format('refs/pull/{0}/merge', github.event.number) || '' }}
 
       - name: Set up Bazel
         uses: bazel-contrib/setup-bazel@9f0750536d239de15c1f8528e2ba6c17a99fb752 # 0.19.1
