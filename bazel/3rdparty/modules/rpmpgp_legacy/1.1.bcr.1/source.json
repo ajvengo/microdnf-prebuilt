@@ -1,0 +1,9 @@
+{
+    "url": "https://github.com/rpm-software-management/rpmpgp_legacy/archive/refs/tags/1.1.tar.gz",
+    "integrity": "sha256-XhIzAaSLjWTpfxwWgJfgI7qmj181Kts+jJVNSsfv0M8=",
+    "strip_prefix": "rpmpgp_legacy-1.1",
+    "overlay": {
+        "BUILD.bazel": "sha256-L4m7cPsRzhntZCXR/p3kaAysAKOP/yWAsvDjLJqgBvw=",
+        "MODULE.bazel": "sha256-2i4tPx8m0k7XGIUR/LO9D5xFzFjqvlWyDIomuAPgfv8="
+    }
+}
