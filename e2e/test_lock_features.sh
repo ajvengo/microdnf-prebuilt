@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dnf_lock option tests against the synthetic "features" repository:
-# --forcearch (and --archlist) solve architecture and $basearch.
+# --excludepkgs, --module-enable and --forcearch.
 set -euo pipefail
 
 DNF_LOCK="$1"
@@ -21,6 +21,10 @@ gpgcheck=0
 REPO
 REPOSDIR="${WORK}/repos.d"
 ARCHLIST=x86_64,noarch
+CA_OLD="ca-certificates-2025.2.80_v9.0.305-1.el9.noarch certuser-1.0-1.noarch"
+CA_NEW="ca-certificates-2026.2.92_v9.0.319-1.el9.noarch certuser-1.0-1.noarch"
+EXPAT_OLD="expat-2.7.2-1.el10.x86_64"
+MYSQL_MODULAR="mysql-8.4.7-1.module+el9.7.0+90001+e2e00084.x86_64"
 
 FAILURES=0
 OUT="${WORK}/out.json"
@@ -60,6 +64,57 @@ expect_lock() {
   fi
 }
 
+# expect_error "description" "stderr substring" dnf_lock-args...
+expect_error() {
+  local desc="$1" needle="$2"
+  shift 2
+  if run_lock "$@"; then
+    fail "${desc}: dnf_lock succeeded, expected an error"
+  elif ! grep -qF -- "${needle}" "${ERR}"; then
+    fail "${desc}: error does not mention '${needle}'" "$(cat "${ERR}")"
+  else
+    echo "ok: ${desc}"
+  fi
+}
+
+section_excludepkgs() {
+  echo "--- excludepkgs"
+  expect_lock "solver sees the newest ca-certificates by default" \
+    "${CA_NEW}" certuser
+  expect_lock "--excludepkgs glob hides the release cut-off" \
+    "${CA_OLD}" \
+    certuser --excludepkgs='ca-certificates-2026.2.92_v9.0.319-*'
+  expect_lock "--setopt=excludepkgs= glob" \
+    "${CA_OLD}" \
+    certuser --setopt='excludepkgs=ca-certificates-2026.2.92_v9.0.319-*'
+  expect_lock "--setopt=<repo>.excludepkgs= glob" \
+    "${CA_OLD}" \
+    certuser --setopt='features.excludepkgs=ca-certificates-2026.2.92_v9.0.319-*'
+  expect_lock "--excludepkgs NEVRA without arch" "${EXPAT_OLD}" expat --excludepkgs=expat-2.7.3-1.el10_2.7
+  expect_lock "--excludepkgs list, matching glob first" "${EXPAT_OLD}" \
+    expat --excludepkgs=expat-2.7.3-1.el10_2.7,nothing-matches
+  expect_lock "--excludepkgs repeated, matching flag first" "${EXPAT_OLD}" \
+    expat --excludepkgs=expat-2.7.3-1.el10_2.7 --excludepkgs=nothing-matches
+  expect_lock "--excludepkgs repeated, matching flag last" "${EXPAT_OLD}" \
+    expat --excludepkgs=nothing-matches --excludepkgs=expat-2.7.3-1.el10_2.7
+  expect_error "excluding every candidate leaves nothing to lock" "No packages matched" \
+    expat --excludepkgs='expat-*'
+}
+
+section_modules() {
+  echo "--- modules (mysql:8.4 is modular, mysql 8.0 is not)"
+  expect_lock "modular packages are hidden by default" "mysql-8.0.44-1.el9.x86_64" \
+    mysql --setopt=module_platform_id=platform:el9
+  expect_lock "--module-enable exposes the stream" \
+    "${MYSQL_MODULAR}" \
+    mysql --module-enable=mysql:8.4 --setopt=module_platform_id=platform:el9
+  expect_lock "--module-enable repeated and comma-separated is deduplicated" \
+    "${MYSQL_MODULAR}" \
+    mysql --module-enable=mysql:8.4,mysql:8.4 --module-enable=mysql:8.4 --setopt=module_platform_id=platform:el9
+  expect_error "--module-enable of an unknown stream fails" "mysql:9.9" \
+    mysql --module-enable=mysql:9.9 --setopt=module_platform_id=platform:el9
+}
+
 section_basearch() {
   echo "--- --forcearch / --archlist solve architecture and \$basearch"
   # A repo whose baseurl holds $basearch, served from a directory named after an
@@ -87,7 +142,7 @@ REPO
 }
 
 # Each shard runs every TEST_TOTAL_SHARDS-th section; unsharded runs take them all.
-SECTIONS=(basearch)
+SECTIONS=(excludepkgs modules basearch)
 if [ -n "${TEST_SHARD_STATUS_FILE:-}" ]; then touch "${TEST_SHARD_STATUS_FILE}"; fi
 for i in "${!SECTIONS[@]}"; do
   if [ $((i % ${TEST_TOTAL_SHARDS:-1})) -eq "${TEST_SHARD_INDEX:-0}" ]; then
