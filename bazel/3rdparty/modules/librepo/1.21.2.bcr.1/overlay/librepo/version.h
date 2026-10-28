@@ -31,9 +31,9 @@ G_BEGIN_DECLS
  */
 
 #define LR_VERSION_MAJOR 1  /*!< Major Librepo version */
-#define LR_VERSION_MINOR 19  /*!< Minor Librepo version */
-#define LR_VERSION_PATCH 0  /*!< Patch Librepo version */
-#define LR_VERSION  "1.19.0" /*!< Version string */
+#define LR_VERSION_MINOR 21  /*!< Minor Librepo version */
+#define LR_VERSION_PATCH 2  /*!< Patch Librepo version */
+#define LR_VERSION  "1.21.2" /*!< Version string */
 
 /** Macro for version check.
  * @param major     Major version
