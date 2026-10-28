@@ -33,7 +33,7 @@ BASE_URL="https://github.com/${GITHUB_REPOSITORY:-bookingcom/microdnf-prebuilt}/
 declare -A INTEGRITIES
 # The file in the output directory of //dnf:<tool>_<platform>. platform_transition_binary keeps the name of the binary
 # it wraps, which is the tool's unless listed here.
-declare -A SRC_NAMES=([dnf5]=dnf5)
+declare -A SRC_NAMES=([dnf5]=dnf5_binary)
 
 for target in dnf5 dnf_lock microdnf rpm2archive rpm2files; do
   for platform in linux_amd64 linux_arm64 osx_amd64 osx_arm64; do
@@ -151,7 +151,7 @@ python3 -c '
 path = "'"${PKG_DIR}"'/microdnf/BUILD.bazel"
 with open(path, "r") as f:
     content = f.read()
-for tool, source in (("rpm2files", "//rpm2files:rpm2files"), ("dnf5", "//dnf:dnf5")):
+for tool, source in (("rpm2files", "//rpm2files:rpm2files"), ("dnf5", "//:dnf5")):
     target = """alias(
     name = "%s",
     actual = "%s",
