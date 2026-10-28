@@ -16,6 +16,7 @@
 #include <librepo/librepo.h>
 #include <solv/evr.h>
 #include <solv/pool.h>
+#include <solv/pool_parserpmrichdep.h>
 #include <solv/repo.h>
 #include <solv/solvable.h>
 
@@ -31,7 +32,82 @@ typedef struct {
   GPtrArray *dependencies;          /* gchar* */
   GPtrArray *dependencies_nevra;    /* gchar* */
   GPtrArray *transitive_deps;       /* gchar* */
+  GPtrArray *recommends;            /* gchar*, dependency strings */
+  GPtrArray *supplements;           /* gchar*, dependency strings */
 } InstalledPkg;
+
+/* The strings of the array under @key of @obj, or NULL when there is no such array. */
+static GPtrArray *
+json_string_array (struct json_object *obj, const char *key)
+{
+  struct json_object *arr = NULL;
+  if (!json_object_object_get_ex (obj, key, &arr) || !json_object_is_type (arr, json_type_array))
+    return NULL;
+  GPtrArray *out = g_ptr_array_new_with_free_func (g_free);
+  int n = json_object_array_length (arr);
+  for (int i = 0; i < n; ++i)
+    {
+      struct json_object *item = json_object_array_get_idx (arr, i);
+      if (item)
+        g_ptr_array_add (out, g_strdup (json_object_get_string (item)));
+    }
+  return out;
+}
+
+/* The dependency @str as pool_dep2str writes it: a rich dependency in parentheses, or "name" /
+ * "name <op> evr". 0 when it is malformed. */
+static Id
+parse_dep (Pool *pool, const char *str)
+{
+  if (*str == '(')
+    return pool_parserpmrichdep (pool, str);
+
+  g_auto(GStrv) parts = g_strsplit (str, " ", 3);
+  if (!parts[0] || !*parts[0])
+    return 0;
+  Id name = pool_str2id (pool, parts[0], 1);
+  if (!parts[1])
+    return name;
+  int flags = 0;
+  for (const char *c = parts[1]; *c; ++c)
+    {
+      if (*c == '<')
+        flags |= REL_LT;
+      else if (*c == '=')
+        flags |= REL_EQ;
+      else if (*c == '>')
+        flags |= REL_GT;
+      else
+        return 0;
+    }
+  if (!flags || !parts[2] || !*parts[2])
+    return 0;
+  return pool_rel2id (pool, name, pool_str2id (pool, parts[2], 1), flags, 1);
+}
+
+/* Adds the dependency strings @deps to @new_id under @keyname. */
+static void
+add_dep_strings (Pool *pool, Repo *sys_repo, Id new_id, Id keyname, const GPtrArray *deps)
+{
+  for (guint i = 0; deps && i < deps->len; ++i)
+    {
+      Id dep = parse_dep (pool, g_ptr_array_index (deps, i));
+      if (dep)
+        repo_add_deparray (sys_repo, new_id, keyname, dep, 0);
+    }
+}
+
+/* Records the dependency array @off of @s under @key of @pkg_obj, as strings; nothing when it is empty. */
+static void
+add_dep_strings_to_json (struct json_object *pkg_obj, const char *key, Pool *pool, const Solvable *s, Offset off)
+{
+  if (!off)
+    return;
+  struct json_object *arr = json_object_new_array ();
+  for (Id *dp = s->repo->idarraydata + off; *dp; dp++)
+    json_object_array_add (arr, json_object_new_string (pool_dep2str (pool, *dp)));
+  json_object_object_add (pkg_obj, key, arr);
+}
 
 static void
 installed_pkg_free (InstalledPkg *pkg)
@@ -51,6 +127,10 @@ installed_pkg_free (InstalledPkg *pkg)
     g_ptr_array_unref (pkg->dependencies_nevra);
   if (pkg->transitive_deps)
     g_ptr_array_unref (pkg->transitive_deps);
+  if (pkg->recommends)
+    g_ptr_array_unref (pkg->recommends);
+  if (pkg->supplements)
+    g_ptr_array_unref (pkg->supplements);
   g_free (pkg);
 }
 
@@ -286,50 +366,11 @@ parse_and_merge_lockfile (const gchar *path,
           if (json_object_object_get_ex (p_obj, "requested", &req_obj))
             pkg->requested = json_object_get_boolean (req_obj);
 
-          /* Dependencies */
-          struct json_object *deps_arr = NULL;
-          if (json_object_object_get_ex (p_obj, "dependencies", &deps_arr) &&
-              json_object_is_type (deps_arr, json_type_array))
-            {
-              pkg->dependencies = g_ptr_array_new_with_free_func (g_free);
-              int nd = json_object_array_length (deps_arr);
-              for (int d = 0; d < nd; ++d)
-                {
-                  struct json_object *d_item = json_object_array_get_idx (deps_arr, d);
-                  if (d_item)
-                    g_ptr_array_add (pkg->dependencies, g_strdup (json_object_get_string (d_item)));
-                }
-            }
-
-          /* Dependencies NEVRA */
-          struct json_object *deps_nevra_arr = NULL;
-          if (json_object_object_get_ex (p_obj, "dependencies_nevra", &deps_nevra_arr) &&
-              json_object_is_type (deps_nevra_arr, json_type_array))
-            {
-              pkg->dependencies_nevra = g_ptr_array_new_with_free_func (g_free);
-              int nd = json_object_array_length (deps_nevra_arr);
-              for (int d = 0; d < nd; ++d)
-                {
-                  struct json_object *d_item = json_object_array_get_idx (deps_nevra_arr, d);
-                  if (d_item)
-                    g_ptr_array_add (pkg->dependencies_nevra, g_strdup (json_object_get_string (d_item)));
-                }
-            }
-
-          /* Transitive dependencies */
-          struct json_object *trans_arr = NULL;
-          if (json_object_object_get_ex (p_obj, "transitive_dependencies", &trans_arr) &&
-              json_object_is_type (trans_arr, json_type_array))
-            {
-              pkg->transitive_deps = g_ptr_array_new_with_free_func (g_free);
-              int nd = json_object_array_length (trans_arr);
-              for (int d = 0; d < nd; ++d)
-                {
-                  struct json_object *d_item = json_object_array_get_idx (trans_arr, d);
-                  if (d_item)
-                    g_ptr_array_add (pkg->transitive_deps, g_strdup (json_object_get_string (d_item)));
-                }
-            }
+          pkg->dependencies = json_string_array (p_obj, "dependencies");
+          pkg->dependencies_nevra = json_string_array (p_obj, "dependencies_nevra");
+          pkg->transitive_deps = json_string_array (p_obj, "transitive_dependencies");
+          pkg->recommends = json_string_array (p_obj, "recommends");
+          pkg->supplements = json_string_array (p_obj, "supplements");
 
           /* A later layer overrides an earlier one's package with the same key */
           gchar *key = installed_key (pkg->name, pkg->arch, pkg->nevra, installonly);
@@ -879,6 +920,10 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                       repo_add_deparray (sys_repo, new_id, SOLVABLE_REQUIRES, pool_str2id (pool, dn, 1), 0);
                     }
                 }
+              /* Recorded by the lock that put the package in the layer: dnf leaves out the
+               * providers of Recommends an installed package left unmet. */
+              add_dep_strings (pool, sys_repo, new_id, SOLVABLE_RECOMMENDS, inst->recommends);
+              add_dep_strings (pool, sys_repo, new_id, SOLVABLE_SUPPLEMENTS, inst->supplements);
             }
         }
 
@@ -1332,6 +1377,11 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
           g_list_free (nk);
         }
       json_object_object_add (pkg_obj, "dependencies_nevra", deps_nevra_arr);
+
+      /* Weak dependencies, so that a later lock on top of this one knows what the package left unmet */
+      Solvable *s_pkg = pool_id2solvable (pool, dnf_package_get_id (pkg));
+      add_dep_strings_to_json (pkg_obj, "recommends", pool, s_pkg, s_pkg->recommends);
+      add_dep_strings_to_json (pkg_obj, "supplements", pool, s_pkg, s_pkg->supplements);
 
       /* Compute flat transitive dependencies */
       g_autoptr(GHashTable) trans_set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
