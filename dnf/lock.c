@@ -72,6 +72,62 @@ lookup_installed (GHashTable *installed_by_key, DnfPackage *pkg, const gchar **i
 }
 
 static gchar *
+compute_package_integrity (DnfPackage *pkg);
+
+/* TRUE if the layer's recorded integrity says @pkg is a different build. A missing or
+ * empty integrity on either side says nothing, so it counts as the same build. */
+static gboolean
+layer_integrity_differs (const gchar *layer_integrity, DnfPackage *pkg)
+{
+  if (!layer_integrity || !*layer_integrity)
+    return FALSE;
+  g_autofree gchar *integrity = compute_package_integrity (pkg);
+  return integrity && *integrity && g_strcmp0 (layer_integrity, integrity) != 0;
+}
+
+/* The layer holds @inst at a NEVRA the repositories lack, so its own provides are unknown.
+ * Give the synthetic solvable @new_id those of the repositories' newest build of the name:
+ * sonames and file paths rarely change between builds, and a solvable that provides only its
+ * name leaves the layer's other packages, whose requires come from the repositories, unsatisfied.
+ * The build's provides on the name itself (name, name = evr, name(arch) = evr) are its own and
+ * are skipped. */
+static void
+add_provides_of_name (Pool *pool, Repo *sys_repo, Id new_id, DnfSack *sack, const InstalledPkg *inst,
+                      const gchar *opt_archlist)
+{
+  hy_autoquery HyQuery q = hy_query_create (sack);
+  hy_query_filter (q, HY_PKG_REPONAME, HY_NEQ, HY_SYSTEM_REPO_NAME);
+  hy_query_filter (q, HY_PKG_NAME, HY_EQ, inst->name);
+  if (inst->arch)
+    hy_query_filter (q, HY_PKG_ARCH, HY_EQ, inst->arch);
+  else if (opt_archlist)
+    {
+      g_auto(GStrv) archs = g_strsplit_set (opt_archlist, ", ", -1);
+      hy_query_filter_in (q, HY_PKG_ARCH, HY_EQ, (const char **)archs);
+    }
+  hy_query_filter_num (q, HY_PKG_LATEST_PER_ARCH, HY_EQ, 1);
+  g_autoptr(GPtrArray) builds = hy_query_run (q);
+  if (!builds || builds->len == 0)
+    return;
+
+  Solvable *s_build = pool_id2solvable (pool, dnf_package_get_id (g_ptr_array_index (builds, 0)));
+  if (!s_build->provides)
+    return;
+  const char *name = pool_id2str (pool, s_build->name);
+  gsize name_len = strlen (name);
+  for (Id *dp = s_build->repo->idarraydata + s_build->provides; *dp; dp++)
+    {
+      Id base = *dp;
+      while (ISRELDEP (base))
+        base = GETRELDEP (pool, base)->name;
+      const char *base_str = pool_id2str (pool, base);
+      if (strncmp (base_str, name, name_len) == 0 && (base_str[name_len] == '\0' || base_str[name_len] == '('))
+        continue;
+      repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, *dp, 0);
+    }
+}
+
+static gchar *
 compute_package_integrity (DnfPackage *pkg)
 {
   int chk_type = 0;
@@ -325,6 +381,90 @@ select_one_pkg_for_nevra (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
     }
 
   return pkgs_to_use;
+}
+
+/* The candidates of the specs, one per name.arch. Repos of equal priority each
+ * contribute their newest package, so the same NEVRA can appear once per repo
+ * (or an older and a newer one); installing every one of them fails with
+ * "cannot install both X from repoA and X from repoB". Keep the highest EVR and,
+ * for equal EVRs, the repo that wins on priority and cost. */
+static GPtrArray *
+pick_one_pkg_per_name_arch (DnfRepoLoader *repo_loader, GPtrArray *pkgs)
+{
+  g_autoptr(GHashTable) best = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+  for (guint i = 0; i < pkgs->len; ++i)
+    {
+      DnfPackage *pkg = g_ptr_array_index (pkgs, i);
+      g_autofree gchar *key = g_strdup_printf ("%s.%s", dnf_package_get_name (pkg),
+                                               dnf_package_get_arch (pkg));
+      DnfPackage *cur = g_hash_table_lookup (best, key);
+      if (!cur)
+        {
+          g_hash_table_insert (best, g_steal_pointer (&key), pkg);
+          continue;
+        }
+      gint cmp = dnf_package_evr_cmp (pkg, cur);
+      if (cmp > 0 || (cmp == 0 && dnf_package_repo_prio_cost_cmp (pkg, cur, repo_loader) < 0))
+        g_hash_table_insert (best, g_steal_pointer (&key), pkg);
+    }
+
+  GPtrArray *out = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
+  for (guint i = 0; i < pkgs->len; ++i)
+    {
+      DnfPackage *pkg = g_ptr_array_index (pkgs, i);
+      g_autofree gchar *key = g_strdup_printf ("%s.%s", dnf_package_get_name (pkg),
+                                               dnf_package_get_arch (pkg));
+      if (g_hash_table_lookup (best, key) == pkg)
+        g_ptr_array_add (out, g_object_ref (pkg));
+    }
+  return out;
+}
+
+/* Records the weak-dependency edges of @pkg_name in @edges (name -> set of names):
+ * from the packages its @deps (Recommends) name to it, or with @reverse
+ * (Supplements) from them to it, limited to the packages of the solve. (libsolv
+ * does not pull a package in for a Supplements trigger a layer below installed,
+ * so such a trigger needs no edge.)
+ * Rich dependencies need no parsing: the provides query of a boolean dependency
+ * returns the providers of every operand ("(foo and bar)" matches foo and bar,
+ * "(a if b)" matches a), so an edge can be added that the solver would not
+ * follow, never one fewer. */
+static void
+collect_weak_edges (HyQuery dep_query, DnfReldepList *deps, GHashTable *id_to_pkg,
+                    const char *pkg_name, gboolean reverse, GHashTable *edges)
+{
+  if (!deps)
+    return;
+
+  int n_deps = dnf_reldep_list_count (deps);
+  for (int d = 0; d < n_deps; ++d)
+    {
+      DnfReldep *reldep = dnf_reldep_list_index (deps, d);
+      hy_query_filter_reldep (dep_query, HY_PKG_PROVIDES, reldep);
+      g_autoptr(GPtrArray) providers = hy_query_run (dep_query);
+      hy_query_clear (dep_query);
+      dnf_reldep_free (reldep);
+
+      for (guint p = 0; p < providers->len; ++p)
+        {
+          DnfPackage *prov = g_ptr_array_index (providers, p);
+          const char *prov_name = dnf_package_get_name (prov);
+          if (!prov_name || g_strcmp0 (prov_name, pkg_name) == 0 ||
+              !g_hash_table_contains (id_to_pkg, GUINT_TO_POINTER (dnf_package_get_id (prov))))
+            continue;
+
+          const char *from = reverse ? prov_name : pkg_name;
+          const char *to = reverse ? pkg_name : prov_name;
+          GHashTable *set = g_hash_table_lookup (edges, from);
+          if (!set)
+            {
+              set = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+              g_hash_table_insert (edges, g_strdup (from), set);
+            }
+          g_hash_table_add (set, g_strdup (to));
+        }
+    }
+  dnf_reldep_list_free (deps);
 }
 
 /* Candidates of the specs in @pkgs_spec: just the newest per arch with @latest,
@@ -647,8 +787,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
           if (cand_pkgs && cand_pkgs->len > 0)
             {
               DnfPackage *cand = g_ptr_array_index (cand_pkgs, 0);
-              g_autofree gchar *cand_integrity = compute_package_integrity (cand);
-              if (inst->integrity && cand_integrity && g_strcmp0 (inst->integrity, cand_integrity) != 0)
+              if (layer_integrity_differs (inst->integrity, cand))
                 {
                   /* RPM integrity changed! Do not mark as installed so solver fetches updated package */
                   continue;
@@ -715,6 +854,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
               Id self_dep = pool_rel2id (pool, s_new->name, s_new->evr, REL_EQ, 1);
               repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, self_dep, 0);
               repo_add_deparray (sys_repo, new_id, SOLVABLE_PROVIDES, s_new->name, 0);
+              add_provides_of_name (pool, sys_repo, new_id, sack, inst, opt_archlist);
 
               if (inst->dependencies)
                 {
@@ -737,8 +877,10 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   for (guint i = 0; i < actual_target_pkgs->len; ++i)
     pkgs_spec_array[i] = g_strdup (g_ptr_array_index (actual_target_pkgs, i));
 
+  DnfRepoLoader *repo_loader = dnf_context_get_repo_loader (ctx);
   hy_autoquery HyQuery query = get_packages_query (ctx, pkgs_spec_array, opt_archlist, TRUE);
-  g_autoptr(GPtrArray) target_pkgs = hy_query_run (query);
+  g_autoptr(GPtrArray) candidate_pkgs = hy_query_run (query);
+  g_autoptr(GPtrArray) target_pkgs = pick_one_pkg_per_name_arch (repo_loader, candidate_pkgs);
 
   for (guint i = 0; i < target_pkgs->len; ++i)
     {
@@ -770,6 +912,10 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
   g_autoptr(GPtrArray) all_pkgs = g_ptr_array_new_with_free_func ((GDestroyNotify)g_object_unref);
   g_autoptr(GPtrArray) obsoleted = NULL;
+
+  /* dnf's install_weak_deps (default True): the solver installs the Recommends
+   * of what it installs, and the Supplements that match */
+  const gboolean weak_deps = dnf_context_get_install_weak_deps ();
 
   if (target_pkgs->len > 0)
     {
@@ -805,7 +951,13 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
             }
         }
 
-      if (hy_goal_run_flags (goal, use_best ? DNF_FORCE_BEST : DNF_NONE) != 0)
+      int run_flags = DNF_NONE;
+      if (use_best)
+        run_flags |= DNF_FORCE_BEST;
+      if (!weak_deps)
+        run_flags |= DNF_IGNORE_WEAK_DEPS;
+
+      if (hy_goal_run_flags (goal, (DnfGoalActions)run_flags) != 0)
         {
           g_autofree gchar *problems = lock_goal_describe_problems (goal);
           g_set_error (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
@@ -831,12 +983,8 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
             {
               g_ptr_array_add (all_pkgs, g_object_ref (pkg));
             }
-          else
-            {
-              g_autofree gchar *integrity = compute_package_integrity (pkg);
-              if (g_strcmp0 (integrity, inst->integrity) != 0)
-                g_ptr_array_add (all_pkgs, g_object_ref (pkg));
-            }
+          else if (layer_integrity_differs (inst->integrity, pkg))
+            g_ptr_array_add (all_pkgs, g_object_ref (pkg));
         }
 
       g_autoptr(GPtrArray) installs = hy_goal_list_installs (goal, NULL);
@@ -850,12 +998,8 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                 {
                   g_ptr_array_add (all_pkgs, g_object_ref (pkg));
                 }
-              else
-                {
-                  g_autofree gchar *integrity = compute_package_integrity (pkg);
-                  if (g_strcmp0 (integrity, inst->integrity) != 0)
-                    g_ptr_array_add (all_pkgs, g_object_ref (pkg));
-                }
+              else if (layer_integrity_differs (inst->integrity, pkg))
+                g_ptr_array_add (all_pkgs, g_object_ref (pkg));
             }
         }
 
@@ -872,7 +1016,6 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       hy_goal_free (goal);
     }
 
-  DnfRepoLoader *repo_loader = dnf_context_get_repo_loader (ctx);
   g_autoptr(GPtrArray) resolved = select_one_pkg_for_nevra (repo_loader, all_pkgs);
   g_ptr_array_set_free_func (resolved, g_object_unref);
 
@@ -906,6 +1049,14 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
             }
         }
     }
+
+  /* Without --exclude every package the solver installs is kept, as dnf installs
+   * it. With it, what is only reachable through an excluded package is trimmed. */
+  const gboolean trim = g_hash_table_size (exclude_set) > 0;
+
+  /* Weak edges (Recommends, reverse Supplements), only followed to find what to
+   * trim; they stay out of "dependencies" as the package does not require them. */
+  g_autoptr(GHashTable) pkg_weak_deps = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_hash_table_unref);
 
   /* Discover direct dependencies of each resolved package */
   hy_autoquery HyQuery dep_query = hy_query_create (sack);
@@ -962,6 +1113,14 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
 
       g_hash_table_insert (pkg_direct_deps, g_strdup (pkg_name), dep_names);
       g_hash_table_insert (pkg_direct_nevras, g_strdup (pkg_name), dep_nevras);
+
+      if (trim && weak_deps)
+        {
+          collect_weak_edges (dep_query, dnf_package_get_recommends (pkg), id_to_pkg,
+                              pkg_name, FALSE, pkg_weak_deps);
+          collect_weak_edges (dep_query, dnf_package_get_supplements (pkg), id_to_pkg,
+                              pkg_name, TRUE, pkg_weak_deps);
+        }
     }
 
   /* Excluded packages: those in exclude_set UNLESS directly requested */
@@ -994,7 +1153,7 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
     }
 
   /* If directly requested packages are all already installed, keep new packages reachable */
-  if (!any_in_reachable)
+  if (!trim || !any_in_reachable)
     {
       for (guint i = 0; i < resolved->len; ++i)
         {
@@ -1012,12 +1171,17 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
   while (!g_queue_is_empty (queue))
     {
       gchar *curr = g_queue_pop_head (queue);
-      GHashTable *curr_deps = g_hash_table_lookup (pkg_direct_deps, curr);
-      if (curr_deps)
+      GHashTable *edge_sets[] = {
+        g_hash_table_lookup (pkg_direct_deps, curr),
+        g_hash_table_lookup (pkg_weak_deps, curr),
+      };
+      for (guint e = 0; e < G_N_ELEMENTS (edge_sets); ++e)
         {
+          if (!edge_sets[e])
+            continue;
           GHashTableIter dep_it;
           gpointer dep_k;
-          g_hash_table_iter_init (&dep_it, curr_deps);
+          g_hash_table_iter_init (&dep_it, edge_sets[e]);
           while (g_hash_table_iter_next (&dep_it, &dep_k, NULL))
             {
               const char *dep_name = dep_k;
