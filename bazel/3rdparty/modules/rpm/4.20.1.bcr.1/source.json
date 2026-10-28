@@ -1,14 +1,15 @@
 {
-    "url": "https://ftp.osuosl.org/pub/rpm/releases/rpm-4.18.x/rpm-4.18.2.tar.bz2",
+    "url": "https://ftp.osuosl.org/pub/rpm/releases/rpm-4.20.x/rpm-4.20.1.tar.bz2",
     "mirror_urls": [
-        "https://ftp.icm.edu.pl/packages/rpm/releases/rpm-4.18.x/rpm-4.18.2.tar.bz2"
+        "https://ftp.icm.edu.pl/packages/rpm/releases/rpm-4.20.x/rpm-4.20.1.tar.bz2"
     ],
-    "integrity": "sha256-un7uG8LG+DvnPApA0VnGJcuu2XazrARCM0BPslrhuXk=",
-    "strip_prefix": "rpm-4.18.2",
+    "integrity": "sha256-UmR+EmODZFM6tnHLyOSFyW+fCIidk/4O0QSmYyZhEk8=",
+    "strip_prefix": "rpm-4.20.1",
     "overlay": {
-        "BUILD.bazel": "sha256-2mBRjufknAGczA7vaQpJ25DpwU1aImzvg2gbc7zgX0o=",
-        "MODULE.bazel": "sha256-+1fuMpUcrX2tVJKhTGKqzxOge0UJDBobYBSeNLcTP0M=",
+        "BUILD.bazel": "sha256-ZzpYihzQNopEHuGm9QDTIPGmm0pL0J5w10WDylau29Y=",
+        "MODULE.bazel": "sha256-jEd3hNeLjEMhF/3U0d1kZZzNV0/xHnEJj24xLYqx/TI=",
         "config.h": "sha256-TMIlbetp1m8D9rDCac5qHf9lP5bMCgGDPqNlqXeqnQo=",
-        "rpm_config.h": "sha256-R+U1zv92i9wE1H8ga38+2A9s65xX2/nvisZcaGVXGO8="
+        "lib/tagtbl.inc": "sha256-qcen3o89rPcZacmDyPE7svtASOK7ZMZJZ9UZOQADhss=",
+        "rpm_config.h": "sha256-8aXvOu1qUa/TkFIzFTpHFgnrQMxxqFdomSe/Wz9O++I="
     }
 }
