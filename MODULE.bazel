@@ -111,9 +111,9 @@ bazel_dep(name = "gpgme", version = "1.24.2.bcr.11", dev_dependency = True)
 bazel_dep(name = "popt", version = "1.19.0.bcr.7", dev_dependency = True)
 bazel_dep(name = "file", version = "5.46.0.bcr.4", dev_dependency = True)
 bazel_dep(name = "json-c", version = "0.18.0.bcr.3", dev_dependency = True)
-bazel_dep(name = "rpm", version = "4.18.2.bcr.13", dev_dependency = True)
-bazel_dep(name = "libsolv", version = "0.7.32.bcr.14", dev_dependency = True)
-bazel_dep(name = "librepo", version = "1.19.0.bcr.11", dev_dependency = True)
+bazel_dep(name = "rpm", version = "4.20.1.bcr.1", dev_dependency = True)
+bazel_dep(name = "libsolv", version = "0.7.41.bcr.1", dev_dependency = True)
+bazel_dep(name = "librepo", version = "1.21.2.bcr.1", dev_dependency = True)
 bazel_dep(name = "libmodulemd", version = "2.15.0.bcr.15", dev_dependency = True)
 bazel_dep(name = "libdnf", version = "0.74.0.bcr.27", dev_dependency = True)
 
@@ -121,6 +121,24 @@ bazel_dep(name = "libdnf", version = "0.74.0.bcr.27", dev_dependency = True)
 single_version_override(
     module_name = "libgpg-error",
     version = "1.51.0.bcr.5",
+)
+
+# Enforce 1.21.2.bcr.1 across transitive 3rdparty dependencies (libdnf)
+single_version_override(
+    module_name = "librepo",
+    version = "1.21.2.bcr.1",
+)
+
+# Enforce 0.7.41.bcr.1 across transitive 3rdparty dependencies (libdnf)
+single_version_override(
+    module_name = "libsolv",
+    version = "0.7.41.bcr.1",
+)
+
+# Enforce 4.20.1.bcr.1 across transitive 3rdparty dependencies (libdnf, libsolv, libmodulemd)
+single_version_override(
+    module_name = "rpm",
+    version = "4.20.1.bcr.1",
 )
 
 # Bazel Integration Tests

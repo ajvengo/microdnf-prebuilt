@@ -1,0 +1,10 @@
+{
+    "url": "https://github.com/openSUSE/libsolv/archive/refs/tags/0.7.41.tar.gz",
+    "integrity": "sha256-OLTuGST4vR7A9rLsFH5MVMberBMttfkLQhS0PM0y/dY=",
+    "strip_prefix": "libsolv-0.7.41",
+    "overlay": {
+        "BUILD.bazel": "sha256-UXkq0hr6EGnEUY6vplDSH3Qy7wrboCciZ/bxeC7K87I=",
+        "MODULE.bazel": "sha256-xe+3rr6SxvZTcYbA+WOn6+k0zIkIH5xyjfJ73DxZA6A=",
+        "src/solvversion.h": "sha256-OVuPn6nyJhYEKRFoVAe78Q5AuAD5A3UxTLebE+71kVQ="
+    }
+}

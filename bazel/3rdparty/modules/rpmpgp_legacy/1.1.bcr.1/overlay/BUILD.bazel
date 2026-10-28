@@ -1,0 +1,19 @@
+# rpm's legacy OpenPGP parser (rpm builds it with WITH_SEQUOIA=OFF, WITH_LEGACY_OPENPGP=ON,
+# WITH_OPENSSL=ON). Upstream cannot be built standalone: the sources include rpm's
+# system.h/debug.h/rpmpgpval.h and rely on rpm's config.h. They are therefore exported as
+# plain sources and compiled by @rpm//:rpmio with rpm's own copts, mirroring upstream, which
+# adds this directory to librpmio as rpmio/rpmpgp_legacy.
+filegroup(
+    name = "sources",
+    srcs = [
+        "rpmpgp_internal.c",
+        "rpmpgp_internal.h",
+        "rpmpgp_internal_api.c",
+        "rpmpgp_internal_armor.c",
+        "rpmpgp_internal_lint.c",
+        "rpmpgp_internal_merge.c",
+        "rpmpgp_internal_openssl.c",
+        "rpmpgp_internal_pubkey.c",
+    ],
+    visibility = ["//visibility:public"],
+)
