@@ -15,6 +15,8 @@ def _solver_args(ctx):
         args.append("--setopt=module_platform_id=" + ctx.attr.module_platform_id)
     if ctx.attr.nobest:
         args.append("--nobest")
+    if not ctx.attr.install_weak_deps:
+        args.append("--setopt=install_weak_deps=False")
     return args
 
 def _rpm_lock_impl(ctx):
@@ -199,6 +201,10 @@ rpm_lock = rule(
         ),
         "forcearch": attr.string(
             doc = "Architecture to solve for instead of the host's (default: first non-noarch entry of arch).",
+        ),
+        "install_weak_deps": attr.bool(
+            default = True,
+            doc = "Install weak dependencies (Recommends, matching Supplements), like dnf's install_weak_deps. False leaves them out.",
         ),
         "lock_files": attr.label_list(
             default = [],
