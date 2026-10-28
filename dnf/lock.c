@@ -5,6 +5,7 @@
 
 #include "lock.h"
 #include "lock-repo.h"
+#include "dnf-goal.h"
 #include "dnf-utils.h"
 
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include <glib.h>
 #include <json-c/json.h>
 #include <librepo/librepo.h>
+#include <solv/evr.h>
 #include <solv/pool.h>
 #include <solv/repo.h>
 #include <solv/solvable.h>
@@ -83,6 +85,16 @@ layer_integrity_differs (const gchar *layer_integrity, DnfPackage *pkg)
     return FALSE;
   g_autofree gchar *integrity = compute_package_integrity (pkg);
   return integrity && *integrity && g_strcmp0 (layer_integrity, integrity) != 0;
+}
+
+/* Copies the dependency array @from_off of @from, under @keyname, onto @new_id. */
+static void
+copy_deparray (Repo *sys_repo, Id new_id, const Solvable *from, Id keyname, Offset from_off)
+{
+  if (!from_off)
+    return;
+  for (Id *dp = from->repo->idarraydata + from_off; *dp; dp++)
+    repo_add_deparray (sys_repo, new_id, keyname, *dp, 0);
 }
 
 /* The layer holds @inst at a NEVRA the repositories lack, so its own provides are unknown.
@@ -840,6 +852,9 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
                       dp++;
                     }
                 }
+              /* dnf leaves out the providers of Recommends an installed package left unmet */
+              copy_deparray (sys_repo, new_id, s_cand, SOLVABLE_RECOMMENDS, s_cand->recommends);
+              copy_deparray (sys_repo, new_id, s_cand, SOLVABLE_SUPPLEMENTS, s_cand->supplements);
             }
           else
             {
@@ -923,7 +938,20 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       if (use_best)
         {
           for (guint i = 0; i < target_pkgs->len; ++i)
-            hy_goal_install (goal, g_ptr_array_index (target_pkgs, i));
+            {
+              DnfPackage *pkg = g_ptr_array_index (target_pkgs, i);
+              /* dnf leaves an installed package alone unless the repositories hold a newer
+               * build: an install job for an older or identical copy of it would count as a
+               * fresh install and pull in that copy's weak dependencies. */
+              InstalledPkg *inst = lookup_installed (installed_by_key, pkg, installonly);
+              if (inst && inst->version)
+                {
+                  int cmp = pool_evrcmp_str (pool, inst->version, dnf_package_get_evr (pkg), EVRCMP_COMPARE);
+                  if (cmp > 0 || (cmp == 0 && !layer_integrity_differs (inst->integrity, pkg)))
+                    continue;
+                }
+              hy_goal_install (goal, pkg);
+            }
         }
       else
         {
@@ -957,7 +985,13 @@ run_lock (int argc, char **argv, GOptionContext *opt_ctx, DnfContext *ctx, GErro
       if (!weak_deps)
         run_flags |= DNF_IGNORE_WEAK_DEPS;
 
-      if (hy_goal_run_flags (goal, (DnfGoalActions)run_flags) != 0)
+      /* dnf_goal_depsolve, unlike hy_goal_run_flags, excludes from weak-dependency
+       * installation the providers of Recommends that the installed packages left
+       * unmet, so an upgrade only adds the weak dependencies that are new. */
+      g_autoptr(GError) depsolve_error = NULL;
+      /* Every target may already be in the layers below: an empty transaction is no failure. */
+      if (!dnf_goal_depsolve (goal, (DnfGoalActions)run_flags, &depsolve_error) &&
+          !g_error_matches (depsolve_error, DNF_ERROR, DNF_ERROR_NO_PACKAGES_TO_UPDATE))
         {
           g_autofree gchar *problems = lock_goal_describe_problems (goal);
           g_set_error (error, DNF_ERROR, DNF_ERROR_NO_SOLUTION,
