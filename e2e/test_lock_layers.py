@@ -15,6 +15,7 @@ import tempfile
 
 DNF_LOCK = os.path.abspath(sys.argv[1])
 TMP = tempfile.mkdtemp()
+LAST_OUT = {}  # the lockfile the last successful lock() wrote
 
 
 def pkgid(name, ver, arch):
@@ -88,6 +89,7 @@ def lock(case, repo, below, request, archlist="x86_64,i686,noarch"):
         with open(f"{root}/out.json", encoding="utf-8") as f:
             data = json.load(f)
             nevras = sorted(p["nevra"] for p in data["packages"])
+            LAST_OUT.update(data)
             obsoleted = data.get("obsoleted", [])
     return r.returncode, nevras, r.stderr, obsoleted
 
@@ -164,6 +166,24 @@ rc, nevras, err, obsoleted = lock(CASE, [{"name": "pkg", "ver": "1", "recommends
                                          {"name": "rec"}, {"name": "rec2"}],
                                   [{k: v for k, v in locked("pkg", "1").items() if k != "integrity"}], ["pkg"])
 check(CASE, (rc, nevras), (0, ["pkg-2-1.noarch", "rec2-1-1.noarch"]), err)
+
+# The lock records each package's Recommends and Supplements, so that a later lock knows what the layer's
+# build left unmet even when the repositories no longer hold that build.
+CASE = "a lockfile records the weak dependencies of its packages"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "pkg", "ver": "2", "recommends": ["rec", "rec2"]},
+                                         {"name": "rec"}, {"name": "rec2"}], [], ["pkg"])
+recorded = {p["name"]: p.get("recommends") for p in LAST_OUT["packages"]}
+check(CASE, (rc, recorded), (0, {"pkg": ["rec", "rec2"], "rec": None, "rec2": None}), err)
+
+UPGRADE = [{"name": "pkg", "ver": "2", "recommends": ["rec", "rec2"]}, {"name": "rec"}, {"name": "rec2"}]
+CASE = "an upgrade skips the Recommends recorded for a build the repositories lack"
+rc, nevras, err, obsoleted = lock(CASE, UPGRADE,
+                                  [{**locked("pkg", "1"), "recommends": ["rec"]}], ["pkg"])
+check(CASE, (rc, nevras), (0, ["pkg-2-1.noarch", "rec2-1-1.noarch"]), err)
+
+CASE = "an upgrade of a build without recorded Recommends locks all weak dependencies"
+rc, nevras, err, obsoleted = lock(CASE, UPGRADE, [locked("pkg", "1")], ["pkg"])
+check(CASE, (rc, nevras), (0, ["pkg-2-1.noarch", "rec-1-1.noarch", "rec2-1-1.noarch"]), err)
 
 # dnf installs the Recommends of what it installs (install_weak_deps=True), unless a layer below has them.
 CASE = "a Recommends missing below is locked with its package"

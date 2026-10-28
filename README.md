@@ -27,7 +27,7 @@ bazel run //:microdnf -- rpm2archive -o /path/to/layer.tar.gz pkg1.rpm pkg2.rpm
 ### 2. `dnf_lock`
 Resolves package dependency closures and emits formatted JSON lockfiles for reproducible builds and module extensions.
 - Solves complete dependency closures via `libdnf`'s solver without requiring local root privileges.
-- Outputs package details: `name`, `version`, `arch`, `nevra`, remote `url`, SRI `integrity` (`sha256-...`), hex `checksum`, and `dependencies`.
+- Outputs package details: `name`, `version`, `arch`, `nevra`, remote `url`, SRI `integrity` (`sha256-...`), hex `checksum`, `dependencies`, and, when the package has any, its `recommends` and `supplements` (dependency strings). A later `--lockfile` run reads them as what the layer's build left unmet, so an upgrade adds only the weak dependencies that are new even when the repositories no longer hold that build; entries without them (older lockfiles) lock all weak dependencies of the new build.
 - Pre-parses repository configuration flags (`--setopt=reposdir=...`, `--setopt=cachedir=...`, `--config=...`, `--releasever=...`, `--enablerepo=...`) prior to context setup.
 - Available as a standalone CLI (`//:dnf_lock`) and as a `microdnf` subcommand plugin (`microdnf lock`).
 
