@@ -162,7 +162,7 @@ UPDATEINFO_XML = b"""<?xml version="1.0" ?>
 """
 
 # Synthetic metadata-only repository for the dnf_lock feature tests
-# (forcearch, excludepkgs, modules).
+# (forcearch, excludepkgs, modules, best/nobest).
 # Each tuple: (name, epoch, version, release, arch, [required package names]).
 FEATURE_PACKAGES = [
     # --forcearch: a noarch package served from a $basearch URL.
@@ -173,6 +173,9 @@ FEATURE_PACKAGES = [
     ("certuser", 0, "1.0", "1", "noarch", ["ca-certificates"]),
     ("expat", 0, "2.7.2", "1.el10", "x86_64", []),
     ("expat", 0, "2.7.3", "1.el10_2.7", "x86_64", []),
+    # best / nobest: the newest bestapp is not installable.
+    ("bestapp", 0, "1.0", "1", "noarch", []),
+    ("bestapp", 0, "2.0", "1", "noarch", ["missing-lib"]),
     # --module-enable: non-modular mysql 8.0 and the modular mysql:8.4 stream.
     ("mysql", 0, "8.0.44", "1.el9", "x86_64", []),
     ("mysql", 0, "8.4.7", "1.module+el9.7.0+90001+e2e00084", "x86_64", []),

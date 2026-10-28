@@ -13,6 +13,8 @@ def _solver_args(ctx):
         args.append("--module-enable=" + spec)
     if ctx.attr.module_platform_id:
         args.append("--setopt=module_platform_id=" + ctx.attr.module_platform_id)
+    if ctx.attr.nobest:
+        args.append("--nobest")
     return args
 
 def _rpm_lock_impl(ctx):
@@ -215,6 +217,10 @@ rpm_lock = rule(
         ),
         "module_platform_id": attr.string(
             doc = "Platform module (e.g. 'platform:el9') that module streams are resolved against.",
+        ),
+        "nobest": attr.bool(
+            default = False,
+            doc = "Allow older candidates when the newest requested package is not installable.",
         ),
         "out": attr.output(
             mandatory = False,
