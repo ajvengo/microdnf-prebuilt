@@ -1,6 +1,8 @@
 load("@rules_bazel_integration_test//bazel_integration_test:defs.bzl", "bazel_integration_test", "default_test_runner")
 load("@rules_cc//cc:defs.bzl", "cc_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("@rules_shell//shell:sh_test.bzl", "sh_test")
+load("//e2e:lock_golden.bzl", "lock_golden")
 load("//microdnf:defs.bzl", "dnf_config", "rpm_archive", "rpm_extract", "rpm_lock", "rpm_mark")
 load("//microdnf/private:package.bzl", "rpm_package")
 
@@ -111,8 +113,14 @@ sh_test(
     ] + _SANITIZER_DATA,
 )
 
+# Replaces the sandbox paths of a lockfile (see lock_golden.bzl and normalize_lock.sh).
+sh_binary(
+    name = "normalize_lock",
+    srcs = ["normalize_lock.sh"],
+)
+
 # Step 2 test: Lockfile generation with RPM exclusion
-rpm_lock(
+lock_golden(
     name = "test_generated_lock",
     arch = [
         "x86_64",
@@ -138,7 +146,7 @@ sh_test(
 )
 
 # Incremental lockfile tests
-rpm_lock(
+lock_golden(
     name = "layer2_already_installed_lock",
     arch = [
         "x86_64",
@@ -152,7 +160,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:test_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "layer2_incremental_lock",
     arch = [
         "x86_64",
@@ -166,7 +174,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:test_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "layer2_both_lock",
     arch = [
         "x86_64",
@@ -183,7 +191,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:test_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "changed_integrity_lock",
     arch = [
         "x86_64",
@@ -231,8 +239,8 @@ sh_test(
     shard_count = 6,
 )
 
-# The same options through the rpm_lock attributes
-rpm_lock(
+# The same options through the rpm_lock attributes (golden lockfiles in //e2e/testdata)
+lock_golden(
     name = "attrs_excludepkgs_lock",
     arch = [
         "x86_64",
@@ -246,7 +254,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:features_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "attrs_nobest_lock",
     arch = [
         "x86_64",
@@ -260,7 +268,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:features_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "attrs_noweak_lock",
     arch = [
         "x86_64",
@@ -274,7 +282,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:features_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "attrs_module_lock",
     arch = [
         "x86_64",
@@ -289,7 +297,7 @@ rpm_lock(
     repo_files = ["//e2e/testdata:features_repo_files"],
 )
 
-rpm_lock(
+lock_golden(
     name = "attrs_forcearch_lock",
     arch = [
         "x86_64",
