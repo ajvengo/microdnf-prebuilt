@@ -4,9 +4,9 @@
     "strip_prefix": "libdnf-0.74.0",
     "overlay": {
         "BUILD.bazel": "sha256-eJYGJhclGz9wMbm11ZAuSLlR7TMHEFNEsdIJrt7jUQU=",
-        "MODULE.bazel": "sha256-euqoDcNj/24HEvsXTdG6yxNmHsVGn5+HthCTPXsDvWk=",
+        "MODULE.bazel": "sha256-XuZ89OtprV+K2b33P1D046WihDoiWUACcxS011w8tEA=",
         "libdnf/config-64.h": "sha256-AaYvTD7gByn5TwtTvQ/d9SRjggFc3X3PDAG0O+MwRPk=",
-        "libdnf/dnf-context.cpp": "sha256-PVtIr6G2p3q6eJIEUATV+DOgMdfskVW1biY32Fto364=",
+        "libdnf/dnf-context.cpp": "sha256-3mKLemA40M7RYwph/FVVjwNpMtjgceLWwuqZvMm3lL8=",
         "libdnf/dnf-version.h": "sha256-PB7PFmfONojtK6z9rY5l3nBwiHpwl3+Oo9Fa19cRAVI=",
         "libdnf/utils/PreserveOrderMap.hpp": "sha256-RIGRey0Ef8pOIX1+MD5DrbMSAxBeB8fPWpvokAP2mnI="
     }
