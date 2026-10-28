@@ -1,10 +1,10 @@
 {
-    "url": "https://github.com/openSUSE/libsolv/archive/refs/tags/0.7.32.tar.gz",
-    "integrity": "sha256-jFlX+0F4I3aNcOD676b3X0l/QSiWQSVuT9/s0ZVPoWw=",
-    "strip_prefix": "libsolv-0.7.32",
+    "url": "https://github.com/openSUSE/libsolv/archive/refs/tags/0.7.41.tar.gz",
+    "integrity": "sha256-OLTuGST4vR7A9rLsFH5MVMberBMttfkLQhS0PM0y/dY=",
+    "strip_prefix": "libsolv-0.7.41",
     "overlay": {
-        "BUILD.bazel": "sha256-DgocAKO7lj+YB6+N+bprhciXFVTugrvwZg0tijntY9s=",
-        "MODULE.bazel": "sha256-AGvZJbr+sRCuW99VFj68O6P2+dTIITJqVirhthSEw2g=",
-        "src/solvversion.h": "sha256-vLxrlgpxzBBNGXtxWKR+ayhBvlGsuI0Uemz7GmABlCg="
+        "BUILD.bazel": "sha256-UXkq0hr6EGnEUY6vplDSH3Qy7wrboCciZ/bxeC7K87I=",
+        "MODULE.bazel": "sha256-xe+3rr6SxvZTcYbA+WOn6+k0zIkIH5xyjfJ73DxZA6A=",
+        "src/solvversion.h": "sha256-OVuPn6nyJhYEKRFoVAe78Q5AuAD5A3UxTLebE+71kVQ="
     }
 }
