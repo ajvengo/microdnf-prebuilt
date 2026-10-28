@@ -21,15 +21,11 @@ sh_test(
     args = [
         "$(location //:microdnf)",
         "$(location //:rpm2archive)",
-        "$(location //:dnf_lock)",
         "$(location //:rpm2files)",
-        "$(location //:mark)",
         "$(location //:dnf5)",
     ],
     data = [
         "//:dnf5",
-        "//:dnf_lock",
-        "//:mark",
         "//:microdnf",
         "//:rpm2archive",
         "//:rpm2files",
