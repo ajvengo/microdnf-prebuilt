@@ -1,6 +1,6 @@
 module(
     name = "libdnf",
-    version = "0.74.0.bcr.27",
+    version = "0.74.0.bcr.28",
     compatibility_level = 1,
 )
 
