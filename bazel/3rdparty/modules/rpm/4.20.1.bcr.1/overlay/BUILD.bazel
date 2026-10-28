@@ -13,10 +13,10 @@ cc_library(
         "build/*.h",
         "sign/*.h",
     ]) + [
-        "lib/tagtbl.C",
+        "lib/tagtbl.inc",
         "rpmio/modemuncher.c",
-        "lib/rpmhash.C",
-        "lib/rpmhash.H",
+        "misc/rpmhash.C",
+        "misc/rpmhash.H",
     ],
     includes = [
         ".",
@@ -51,7 +51,6 @@ cc_library(
         "rpmio/rpmlua.c",
         "rpmio/rpmmalloc.c",
         "rpmio/rpmpgp.c",
-        "rpmio/rpmpgp_internal.c",
         "rpmio/rpmsq.c",
         "rpmio/rpmstring.c",
         "rpmio/rpmstrpool.c",
@@ -59,6 +58,8 @@ cc_library(
         "rpmio/rpmver.c",
         "rpmio/rpmvercmp.c",
         "rpmio/url.c",
+        # WITH_LEGACY_OPENPGP: upstream compiles these into librpmio from rpmio/rpmpgp_legacy.
+        "@rpmpgp_legacy//:sources",
     ],
     hdrs = glob(["include/rpm/*.h"]),
     local_defines = ["HAVE_CONFIG_H"],

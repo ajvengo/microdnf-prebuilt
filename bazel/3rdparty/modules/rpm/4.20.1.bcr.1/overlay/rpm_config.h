@@ -4,20 +4,22 @@
 #define PACKAGE "rpm"
 #define PACKAGE_BUGREPORT "https://rpm.org"
 #define PACKAGE_NAME "rpm"
-#define PACKAGE_STRING "rpm 4.18.2"
+#define PACKAGE_STRING "rpm 4.20.1"
 #define PACKAGE_TARNAME "rpm"
 #define PACKAGE_URL "http://www.rpm.org"
-#define PACKAGE_VERSION "4.18.2"
-#define VERSION "4.18.2"
-#define RPMCANONVENDOR "redhat"
+#define PACKAGE_VERSION "4.20.1"
+#define VERSION "4.20.1"
+#define RPM_VENDOR "redhat"
+#define RPM_CONFIGDIR "/usr/lib/rpm"
+#define C_LOCALE "C.UTF-8"
 #define RUNDIR "/run"
 #define GID_0_GROUP "root"
 #define UID_0_USER "root"
 #define __MKDIR_P "/bin/mkdir -p"
 #define ENABLE_NDB 1
 #define ENABLE_PLUGINS 1
-#define WITH_BDB_RO 1
-#define WITH_SQLITE 1
+#define ENABLE_BDB_RO 1
+#define ENABLE_SQLITE 1
 #define HAVE_SQLITE 1
 #define HAVE_ZLIB_H 1
 #define HAVE_BZLIB_H 1
@@ -133,6 +135,6 @@
 #define LOCALSTATEDIR "/var"
 #define LOCALEDIR "/usr/share/locale"
 #define SYSCONFDIR "/etc"
-#define LIBRPMALIAS_FILENAME "rpmpopt-4.18.2"
+#define LIBRPMALIAS_FILENAME "rpmpopt-4.20.1"
 #define LIBRPMALIAS_EXECPATH "/usr/bin"
 #endif
