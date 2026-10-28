@@ -72,3 +72,19 @@ lock_recompute_modular_filtering (DnfContext *ctx, GError **error)
     }
   return TRUE;
 }
+
+extern "C" gchar *
+lock_goal_describe_problems (HyGoal goal)
+{
+  try
+    {
+      auto problems = goal->describeAllProblemRules (true);
+      if (problems.empty ())
+        return g_strdup ("");
+      return g_strdup (libdnf::Goal::formatAllProblemRules (problems).c_str ());
+    }
+  catch (const std::exception &ex)
+    {
+      return g_strdup (ex.what ());
+    }
+}
