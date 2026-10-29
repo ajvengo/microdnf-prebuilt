@@ -21,6 +21,7 @@ DnfConfigInfo = provider(
         "preamble": "List of dnf5 arguments with the tokens @CONFDIR@, @TMP@ and @REPODIR@ for the consumer to expand",
         "releasever": "Release version passed as --releasever",
         "repo_dir": "Execroot-relative directory of the local repository, the value of @REPODIR@",
+        "repo_files": "List of the local repository files (repodata and packages)",
         "repos": "List of rendered .repo files",
     },
 )

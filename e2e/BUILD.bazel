@@ -142,6 +142,20 @@ sh_test(
     ],
 )
 
+sh_test(
+    name = "lock_run_test",
+    srcs = ["test_lock_run.sh"],
+    args = [
+        "e2e/test_generated_lock_run.sh",
+        "$(rootpath :test_generated_lock.lock.json)",
+        "e2e/test_generated_lock.lock.json",
+    ],
+    data = [
+        ":test_generated_lock",
+        ":test_generated_lock.lock.json",
+    ],
+)
+
 # Incremental lockfile tests
 lock_golden(
     name = "layer2_already_installed_lock",

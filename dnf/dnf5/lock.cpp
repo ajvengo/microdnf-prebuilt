@@ -323,10 +323,20 @@ void LockCommand::run() {
         throw libdnf5::cli::CommandExitError(1, M_("No packages matched the specified criteria"));
     }
 
-    // A package of a layer below that the repositories do not replace with a newer or another build.
+    // A package of a layer below that the repositories do not replace with a newer or another build. The integrity
+    // tells builds apart only at the same version: a layer package newer than `pkg` is held, an older one is not.
     auto held = [&](const Package & pkg) {
         auto inst = layers.find(pkg, installonly);
-        return inst && !integrity_differs(inst->integrity, pkg);
+        if (!inst) {
+            return false;
+        }
+        if (inst->version) {
+            int cmp = evrcmp_str(*inst->version, pkg);
+            if (cmp != 0) {
+                return cmp > 0;
+            }
+        }
+        return !integrity_differs(inst->integrity, pkg);
     };
 
     std::vector<Package> all_pkgs;

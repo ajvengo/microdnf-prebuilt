@@ -30,6 +30,8 @@ def _rpm_mark_impl(ctx):
         executable = script,
         arguments = [args],
         tools = [dnf5],
+        # The install time of every package, so that the same packages give the same rpmdb.
+        env = {"SOURCE_DATE_EPOCH": "0"},
         mnemonic = "RpmMark",
         progress_message = "Marking RPM packages into rpmdb %{output}",
     )

@@ -51,7 +51,7 @@ DEST="${BUILD_WORKSPACE_DIRECTORY}/%s/%s"
 TMP_OUT="$(mktemp)"
 trap 'rm -f "${TMP_OUT}"' EXIT
 
-"%s" --output="${TMP_OUT}" %s
+"${PWD}/%s" --output="${TMP_OUT}" %s
 
 mkdir -p "$(dirname "${DEST}")"
 cp -f "${TMP_OUT}" "${DEST}"
