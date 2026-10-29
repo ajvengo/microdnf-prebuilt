@@ -7,9 +7,13 @@
     "strip_prefix": "rpm-4.20.1",
     "overlay": {
         "BUILD.bazel": "sha256-ZzpYihzQNopEHuGm9QDTIPGmm0pL0J5w10WDylau29Y=",
-        "MODULE.bazel": "sha256-jEd3hNeLjEMhF/3U0d1kZZzNV0/xHnEJj24xLYqx/TI=",
+        "MODULE.bazel": "sha256-08HzfvXIvi8m2fsNMdvHxoDTBiMY7YVWhihxX9mzy2w=",
         "config.h": "sha256-TMIlbetp1m8D9rDCac5qHf9lP5bMCgGDPqNlqXeqnQo=",
         "lib/tagtbl.inc": "sha256-qcen3o89rPcZacmDyPE7svtASOK7ZMZJZ9UZOQADhss=",
         "rpm_config.h": "sha256-8aXvOu1qUa/TkFIzFTpHFgnrQMxxqFdomSe/Wz9O++I="
-    }
+    },
+    "patches": {
+        "lib__backend__sqlite.c.patch": "sha256-BJkaM3fEgQje14vqABA/lI39FKZaHWF2idzRDZ/yH0w="
+    },
+    "patch_strip": 1
 }

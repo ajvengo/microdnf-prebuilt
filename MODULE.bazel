@@ -112,7 +112,7 @@ bazel_dep(name = "gpgme", version = "1.24.2.bcr.11", dev_dependency = True)
 bazel_dep(name = "popt", version = "1.19.0.bcr.7", dev_dependency = True)
 bazel_dep(name = "file", version = "5.46.0.bcr.4", dev_dependency = True)
 bazel_dep(name = "json-c", version = "0.18.0.bcr.3", dev_dependency = True)
-bazel_dep(name = "rpm", version = "4.20.1.bcr.1", dev_dependency = True)
+bazel_dep(name = "rpm", version = "4.20.1.bcr.2", dev_dependency = True)
 bazel_dep(name = "libsolv", version = "0.7.41.bcr.1", dev_dependency = True)
 bazel_dep(name = "librepo", version = "1.21.2.bcr.1", dev_dependency = True)
 bazel_dep(name = "libmodulemd", version = "2.15.0.bcr.15", dev_dependency = True)
@@ -137,10 +137,10 @@ single_version_override(
     version = "0.7.41.bcr.1",
 )
 
-# Enforce 4.20.1.bcr.1 across transitive 3rdparty dependencies (libdnf, libsolv, libmodulemd)
+# Enforce 4.20.1.bcr.2 across transitive 3rdparty dependencies (libdnf, libsolv, libmodulemd)
 single_version_override(
     module_name = "rpm",
-    version = "4.20.1.bcr.1",
+    version = "4.20.1.bcr.2",
 )
 
 # Bazel Integration Tests
