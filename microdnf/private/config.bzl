@@ -77,12 +77,13 @@ def solver_settings(attr):
     """The SOLVER_ATTRS values of a rule, as keyword arguments of render_dnf_config."""
     return {name: getattr(attr, name) for name in SOLVER_ATTRS}
 
-def _repo_dir(repo_files):
-    """Execroot-relative directory that holds repodata/, derived like rpm_lock does."""
+def _repo_dir(repo_files, path_of):
+    """Directory that holds repodata/, as path_of sees the repository files."""
     for f in repo_files:
-        if "/repodata/" in f.path or f.path.endswith("/repodata"):
-            return f.path.split("/repodata")[0]
-    return repo_files[0].dirname if repo_files else ""
+        path = path_of(f)
+        if "/repodata/" in path or path.endswith("/repodata"):
+            return path.split("/repodata")[0]
+    return path_of(repo_files[0]).rsplit("/", 1)[0] if repo_files else ""
 
 def render_dnf_config(
         ctx,
@@ -149,7 +150,8 @@ def render_dnf_config(
         module_enable = module_enable,
         preamble = preamble,
         releasever = releasever,
-        repo_dir = _repo_dir(repo_files),
+        repo_dir = _repo_dir(repo_files, lambda f: f.path),
+        repo_files = repo_files,
         repos = repos,
     )
 
@@ -174,7 +176,7 @@ while IFS= read -r line; do
 done < "%s"
 
 "%s" "${PREAMBLE[@]}" %s "$@"
-""" % (path_of(info.conf).rsplit("/", 1)[0], info.repo_dir, path_of(info.args_file), path_of(dnf5), command)
+""" % (path_of(info.conf).rsplit("/", 1)[0], _repo_dir(info.repo_files, path_of), path_of(info.args_file), path_of(dnf5), command)
 
 def _dnf_config_impl(ctx):
     info = render_dnf_config(
