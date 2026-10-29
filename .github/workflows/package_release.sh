@@ -35,7 +35,13 @@ declare -A INTEGRITIES
 for target in dnf5 microdnf rpm2archive rpm2files; do
   for platform in linux_amd64 linux_arm64 osx_amd64 osx_arm64; do
     bin_name="${target}_${platform}"
-    src_file="bazel-bin/dnf/${bin_name}/${target}"
+    # platform_transition_binary keeps the name of the binary it wraps: dnf5 is built as dnf5_binary, since a
+    # target named dnf5 would clash with the dnf/dnf5/ source directory.
+    src_name="${target}"
+    if [[ "${target}" == dnf5 ]]; then
+      src_name=dnf5_binary
+    fi
+    src_file="bazel-bin/dnf/${bin_name}/${src_name}"
     dest_file="release_assets/${bin_name}"
 
     if [ ! -f "${src_file}" ]; then
