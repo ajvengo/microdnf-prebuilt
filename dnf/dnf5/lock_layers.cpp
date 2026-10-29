@@ -111,7 +111,10 @@ void load_lockfile(const std::string & path, const std::vector<std::string> & in
     std::unique_ptr<json_object, decltype(&json_object_put)> guard(root, json_object_put);
 
     json_object * arch = nullptr;
-    if (json_object_object_get_ex(root, "arch", &arch) && !layers.arch) {
+    if (!layers.arch && json_object_object_get_ex(root, "arch", &arch) && !json_object_is_type(arch, json_type_null)) {
+        if (!json_object_is_type(arch, json_type_string)) {
+            fail("Lockfile '" + path + "': arch is not a string");
+        }
         layers.arch = json_object_get_string(arch);
     }
 
@@ -139,6 +142,21 @@ void load_lockfile(const std::string & path, const std::vector<std::string> & in
         pkg->dependencies = string_array(obj, "dependencies");
         pkg->recommends = string_array(obj, "recommends");
         pkg->supplements = string_array(obj, "supplements");
+        // The fields go into a line-oriented libsolv testcase, where a line break would add lines of its own.
+        auto one_line = [&](const char * key, const std::string & value) {
+            if (value.find_first_of("\r\n") != std::string::npos) {
+                fail("Lockfile '" + path + "': package " + std::to_string(i) + " has a line break in " + key);
+            }
+        };
+        one_line("name", pkg->name);
+        one_line("version", pkg->version.value_or(""));
+        one_line("arch", pkg->arch.value_or(""));
+        for (const auto & [key, deps] :
+             {std::pair{"dependencies", &pkg->dependencies}, {"recommends", &pkg->recommends}, {"supplements", &pkg->supplements}}) {
+            for (const auto & dep : *deps) {
+                one_line(key, dep);
+            }
+        }
 
         auto key = key_of(pkg->name, pkg->arch, pkg->nevra, installonly);
         if (auto old = layers.by_key.find(key); old != layers.by_key.end()) {
@@ -300,15 +318,15 @@ void load_system_repo(libdnf5::Base & base, const Layers & layers, const std::ve
     if (fd < 0) {
         fail("Cannot create " + path);
     }
+    // Removed on every way out, including a testcase libsolv rejects.
+    std::unique_ptr<const char, int (*)(const char *)> remove(path.c_str(), unlink);
     auto text = out.str();
     const bool written = write(fd, text.data(), text.size()) == static_cast<ssize_t>(text.size());
     close(fd);
     if (!written) {
-        unlink(path.c_str());
         fail("Cannot write " + path);
     }
     base.get_repo_sack()->create_system_repo_from_libsolv_testcase(path);
-    unlink(path.c_str());
 }
 
 }  // namespace dnf5

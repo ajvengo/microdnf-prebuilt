@@ -60,4 +60,21 @@ if "${DNF5}" "${PREAMBLE[@]}" rpmdb-mark --rpmdb-root="${WORK}/none" --archlist=
 fi
 test ! -e "${WORK}/none/var/lib/rpm/rpmdb.sqlite"
 
+echo "=== 6. An --rpmdb-root that normalizes to / is refused ==="
+for root in /. // /tmp/..; do
+  if "${DNF5}" "${PREAMBLE[@]}" rpmdb-mark --rpmdb-root="${root}" --archlist=x86_64 --nodeps curl 2>"${WORK}/root.err"; then
+    echo "Error: --rpmdb-root=${root} was accepted"
+    exit 1
+  fi
+  grep -qF -- "--rpmdb-root must be specified and cannot be '/'" "${WORK}/root.err"
+done
+
+echo "=== 7. With SOURCE_DATE_EPOCH the same packages give the same rpmdb ==="
+for run in 1 2; do
+  SOURCE_DATE_EPOCH=0 "${DNF5}" "${PREAMBLE[@]}" rpmdb-mark --rpmdb-root="${WORK}/repro${run}" --archlist=x86_64 curl
+  # INSTALLTIME is in seconds: the second run must be in another one.
+  [[ "${run}" -eq 2 ]] || sleep 1
+done
+cmp "${WORK}/repro1/var/lib/rpm/rpmdb.sqlite" "${WORK}/repro2/var/lib/rpm/rpmdb.sqlite"
+
 echo "ALL TESTS PASSED SUCCESSFULLY!"

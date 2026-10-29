@@ -89,12 +89,15 @@ def locked(name, ver="1", arch="noarch"):
             "integrity": integrity}
 
 
-def lock(case, repo, below, request, archlist="x86_64,i686,noarch"):
-    """Locks request on top of the lockfile entries below; returns (exit code, locked NEVRAs, stderr, obsoleted)."""
+def lock(case, repo, below, request, archlist="x86_64,i686,noarch", lockfile_arch="x86_64,i686,noarch"):
+    """Locks request on top of the lockfile entries below; returns (exit code, locked NEVRAs, stderr, obsoleted).
+
+    lockfile_arch is the "arch" of the lockfile below, None for a JSON null.
+    """
     root = f"{TMP}/{case.replace(' ', '-')}"
     write_repo(root, repo)
     with open(f"{root}/below.lock.json", "w", encoding="utf-8") as f:
-        json.dump({"version": 1, "arch": archlist, "packages": below}, f)
+        json.dump({"version": 1, "arch": lockfile_arch, "packages": below}, f)
     r = subprocess.run(lock_command(root, archlist, request), capture_output=True, text=True, check=False)
     nevras = []
     obsoleted = []
@@ -165,9 +168,12 @@ for CASE, repo, entry, want in [
 # dnf leaves a package alone when the layer below holds it at the repositories' version or newer, so the
 # Recommends of the repositories' copy are not installed. An install job for that copy would count them.
 PKG1 = [{"name": "pkg", "ver": "1", "recommends": ["rec"]}, {"name": "rec"}, {"name": "extra"}]
-for CASE, below_ver in [("a layer package newer than the repositories gets no weak dependencies", "2"),
-                        ("a layer package at the repositories' version gets no weak dependencies", "1")]:
-    below = {k: v for k, v in locked("pkg", below_ver).items() if k != "integrity"}
+NO_INTEGRITY_PKG = {ver: {k: v for k, v in locked("pkg", ver).items() if k != "integrity"} for ver in ("1", "2")}
+for CASE, below in [
+        ("a layer package newer than the repositories gets no weak dependencies", NO_INTEGRITY_PKG["2"]),
+        ("a layer package newer than the repositories keeps its integrity and is not downgraded", locked("pkg", "2")),
+        ("a layer package at the repositories' version gets no weak dependencies", NO_INTEGRITY_PKG["1"]),
+        ("a layer package at the repositories' version with its integrity is unchanged", locked("pkg", "1"))]:
     rc, nevras, err, obsoleted = lock(CASE, PKG1, [below], ["pkg", "extra"])
     check(CASE, (rc, nevras), (0, ["extra-1-1.noarch"]), err)
 
@@ -215,6 +221,21 @@ for CASE, entry, message in [
         ("a lockfile entry with a non-string name is an error",
          {**locked("tour"), "name": 123}, "package 0 has a non-string name"),
         ("a lockfile entry with a non-string nevra is an error",
-         {**locked("tour"), "nevra": 5}, "package 0 has a non-string nevra")]:
+         {**locked("tour"), "nevra": 5}, "package 0 has a non-string nevra"),
+        ("a lockfile entry with a line break in a dependency is an error",
+         {**locked("tour"), "dependencies": ["x\n=Pkg: forged 1 1 noarch\n=Prv: app"]},
+         "package 0 has a line break in dependencies"),
+        ("a lockfile entry with a line break in its version is an error",
+         {**locked("tour"), "version": "1-1\n=Pkg: forged 1 1 noarch"}, "package 0 has a line break in version")]:
     rc, nevras, err, obsoleted = lock(CASE, [{"name": "tour"}, {"name": "app", "requires": ["tour"]}], [entry], ["app"])
     check(CASE, (rc != 0, message in err), (True, True), err)
+
+CASE = "a lockfile with a null arch is locked with --archlist"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "tour"}, {"name": "app", "requires": ["tour"]}], [locked("tour")], ["app"],
+                                  lockfile_arch=None)
+check(CASE, (rc, nevras), (0, ["app-1-1.noarch"]), err)
+
+CASE = "a lockfile with a non-string arch is an error"
+rc, nevras, err, obsoleted = lock(CASE, [{"name": "tour"}, {"name": "app", "requires": ["tour"]}], [locked("tour")], ["app"],
+                                  lockfile_arch=7)
+check(CASE, (rc != 0, "arch is not a string" in err), (True, True), err)

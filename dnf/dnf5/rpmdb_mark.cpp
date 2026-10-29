@@ -17,6 +17,9 @@
 #include <rpm/rpmmacro.h>
 #include <rpm/rpmts.h>
 
+#include <cerrno>
+#include <cstdint>
+#include <cstdlib>
 #include <ctime>
 #include <deque>
 #include <filesystem>
@@ -132,6 +135,20 @@ struct RpmTransaction {
 };
 
 // Adds the header of the rpm file to the database, as rpm does when it installs a package but with no files.
+// SOURCE_DATE_EPOCH when set, so that the same packages give the same rpmdb; else the current time, as rpm records.
+uint32_t install_time() {
+    if (const char * epoch = std::getenv("SOURCE_DATE_EPOCH"); epoch && *epoch) {
+        char * end = nullptr;
+        errno = 0;
+        const unsigned long long value = std::strtoull(epoch, &end, 10);
+        if (*end != '\0' || errno != 0 || value > UINT32_MAX) {
+            throw libdnf5::cli::CommandExitError(1, M_("SOURCE_DATE_EPOCH '{}' is not a timestamp"), std::string(epoch));
+        }
+        return static_cast<uint32_t>(value);
+    }
+    return static_cast<uint32_t>(std::time(nullptr));
+}
+
 void import_header(RpmTransaction & rpm, const std::string & path, const std::string & nevra) {
     FD_t fd = Fopen(path.c_str(), "r.ufdio");
     if (!fd) {
@@ -144,7 +161,7 @@ void import_header(RpmTransaction & rpm, const std::string & path, const std::st
     if ((rc != RPMRC_OK && rc != RPMRC_NOKEY && rc != RPMRC_NOTTRUSTED) || !header) {
         throw libdnf5::cli::CommandExitError(1, M_("Cannot read RPM header from '{}'"), path);
     }
-    const auto now = static_cast<uint32_t>(std::time(nullptr));
+    const auto now = install_time();
     if (!headerIsEntry(header, RPMTAG_INSTALLTIME)) {
         headerPutUint32(header, RPMTAG_INSTALLTIME, &now, 1);
     }
@@ -202,6 +219,10 @@ void RpmdbMarkCommand::run() {
     if (specs.empty()) {
         throw libdnf5::cli::CommandExitError(1, M_("Packages are not specified"));
     }
+    // rpm wants an absolute root; normalized first so that "/.", "//" or "/tmp/.." cannot reach the host rpmdb.
+    if (!rpmdb_root.empty()) {
+        rpmdb_root = std::filesystem::absolute(rpmdb_root).lexically_normal().string();
+    }
     if (rpmdb_root.empty() || rpmdb_root == "/") {
         throw libdnf5::cli::CommandExitError(1, M_("--rpmdb-root must be specified and cannot be '/'"));
     }
@@ -232,8 +253,6 @@ void RpmdbMarkCommand::run() {
     rpmPushMacro(nullptr, "_dbpath", nullptr, dbpath.c_str(), RMIL_CMDLINE);
     rpmPushMacro(nullptr, "_db_backend", nullptr, "sqlite", RMIL_CMDLINE);
     rpmPushMacro(nullptr, "_rpmlock_path", nullptr, "%{_dbpath}/.rpm.lock", RMIL_CMDLINE);
-    // rpm wants an absolute root.
-    rpmdb_root = std::filesystem::absolute(rpmdb_root).lexically_normal().string();
     std::filesystem::create_directories(std::filesystem::path(rpmdb_root) / std::filesystem::path(dbpath).relative_path());
 
     RpmTransaction rpm;
