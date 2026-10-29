@@ -9,6 +9,7 @@ bazel_dep(name = "platforms_contrib", version = "1.0.0-alpha.0", dev_dependency 
 bazel_dep(name = "bazel_skylib", version = "1.9.2", dev_dependency = True)
 bazel_dep(name = "bazel_lib", version = "3.7.2", dev_dependency = True)
 bazel_dep(name = "rules_cc", version = "0.2.26", dev_dependency = True)
+bazel_dep(name = "googletest", version = "1.17.0", dev_dependency = True)
 bazel_dep(name = "rules_shell", version = "0.8.0", dev_dependency = True)
 bazel_dep(name = "tar.bzl", version = "0.10.9", dev_dependency = True)
 
@@ -116,6 +117,7 @@ bazel_dep(name = "libsolv", version = "0.7.41.bcr.1", dev_dependency = True)
 bazel_dep(name = "librepo", version = "1.21.2.bcr.1", dev_dependency = True)
 bazel_dep(name = "libmodulemd", version = "2.15.0.bcr.15", dev_dependency = True)
 bazel_dep(name = "libdnf", version = "0.74.0.bcr.28", dev_dependency = True)
+bazel_dep(name = "dnf5", version = "5.4.6.0.bcr.1", dev_dependency = True, repo_name = "dnf5_src")
 
 # Enforce 1.51.0.bcr.5 across transitive 3rdparty dependencies (libassuan, librepo, gpgme)
 single_version_override(
@@ -208,11 +210,6 @@ use_repo(microdnf, "microdnf_src")
 microdnf_prebuilt = use_extension("//microdnf:extensions.bzl", "microdnf_prebuilt_extension")
 use_repo(
     microdnf_prebuilt,
-    "dnf_lock",
-    "dnf_lock_linux_amd64",
-    "dnf_lock_linux_arm64",
-    "dnf_lock_osx_amd64",
-    "dnf_lock_osx_arm64",
     "microdnf",
     "microdnf_linux_amd64",
     "microdnf_linux_arm64",
